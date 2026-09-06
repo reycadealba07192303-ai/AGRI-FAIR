@@ -5,6 +5,7 @@ import 'models/chat_model.dart';
 import 'models/review_model.dart';
 import 'models/notification_model.dart';
 import 'services/api_client.dart';
+import 'services/api_config.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
 import 'screens/welcome_screen.dart';
@@ -15,6 +16,12 @@ import 'screens/sign_in_screen.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
+  // Printed once at startup so a log always says which address this build is
+  // calling. Without it, "cannot reach the server" and "took too long" look
+  // identical whether the backend is down, the laptop moved networks, or the
+  // build simply aimed at the emulator address while running on a phone.
+  debugPrint('[agrifair] talking to ${ApiConfig.baseUrl}');
+
   final user = UserModel();
 
   // Any route can be the one that finds the session gone. Handling it once

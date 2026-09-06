@@ -151,12 +151,19 @@ class ApiClient {
     try {
       response = await request().timeout(_timeout);
     } on SocketException {
+      // Naming the address turns an unanswerable complaint into something a
+      // person can check in one step.
       throw ApiException(
-        'Cannot reach the server. Check that the backend is running and that '
-        'the address in api_config.dart matches this device.',
+        'Cannot reach ${ApiConfig.baseUrl}. '
+        'Is the backend running (npm run dev)? On a real phone the app must '
+        'be started with --dart-define=USE_LAN=true, and the phone has to be '
+        'on the same Wi-Fi as the laptop.',
       );
     } on TimeoutException {
-      throw ApiException('The server took too long to answer. Try again.');
+      throw ApiException(
+        'No answer from ${ApiConfig.baseUrl} after 20 seconds. '
+        'The server may be starting up, or on a different network.',
+      );
     }
 
     return _parse(response, hadToken: hadToken);
