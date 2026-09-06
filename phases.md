@@ -128,10 +128,10 @@ Ang backend ang nag-iisyu ng sarili nitong JWT; ang Firebase ay para lang sa pas
 Ito ang pinakamabigat na phase, at hinaharangan nito ang lahat ng natitira. Hindi
 kayang gawing JSON model ang `RiceProduct` sa kasalukuyang anyo nito.
 
-- [ ] Dagdagan ng `id` ang lahat ng model — wala nito ngayon, at kailangan ito ng bawat endpoint
-- [ ] Alisin ang `Color` at `IconData` sa loob ng models — hindi galing sa JSON ang mga iyon
-- [ ] Palitan ang `const riceProducts` ng async fetch; gawing async ang mga screen na umaasa dito
-- [ ] Kunin ang weight pricing sa `weightTiers` ng backend — huwag nang i-compute sa app
+- [x] Dagdagan ng `id` ang lahat ng model — wala nito ngayon, at kailangan ito ng bawat endpoint
+- [x] Alisin ang `Color` at `IconData` sa loob ng models — hindi galing sa JSON ang mga iyon
+- [x] Palitan ang `const riceProducts` ng async fetch; gawing async ang mga screen na umaasa dito
+- [x] Kunin ang weight pricing sa `weightTiers` ng backend — huwag nang i-compute sa app
 
 **Tapos kapag:** wala nang kahit isang hardcoded na produkto sa `lib/models/`.
 
@@ -143,9 +143,9 @@ kayang gawing JSON model ang `RiceProduct` sa kasalukuyang anyo nito.
 Dito unang magkikita ang dalawang panig: ang inilagay ng seller sa web ay lalabas sa
 telepono ng buyer.
 
-- [ ] Home at Product Detail mula sa `/api/products` at `/api/products/:id`
-- [ ] Search at category filter — `/search`, `/category/:category`
-- [ ] Mga larawan mula sa backend URLs, hindi na local assets
+- [x] Home at Product Detail mula sa `/api/products` at `/api/products/:id`
+- [x] Search at category filter — `/search`, `/category/:category`
+- [x] Mga larawan mula sa backend URLs, hindi na local assets
 - [ ] Product Reviews (pagbasa lang) mula sa `/api/reviews/product/:id`
 
 **Tapos kapag:** ang produktong idinagdag mo sa web admin ay lumalabas sa mobile nang

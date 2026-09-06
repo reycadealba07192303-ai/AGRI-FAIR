@@ -151,12 +151,12 @@ class _CartItemCard extends StatelessWidget {
             width: 64,
             height: 64,
             decoration: BoxDecoration(
-              color: item.product.tagColor.withValues(alpha: 0.1),
+              color: AppColors.primaryLight.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               Icons.rice_bowl_rounded,
-              color: item.product.tagColor.withValues(alpha: 0.6),
+              color: AppColors.primaryLight.withValues(alpha: 0.6),
               size: 32,
             ),
           ),
@@ -203,7 +203,7 @@ class _CartItemCard extends StatelessWidget {
                     ),
                     if (item.quantity > 1)
                       Text(
-                        '  (₱${item.weightOption.price.toInt()} each)',
+                        '  (₱${item.unitPrice.toInt()} each)',
                         style: const TextStyle(
                             fontSize: 11, color: AppColors.textMuted),
                       ),

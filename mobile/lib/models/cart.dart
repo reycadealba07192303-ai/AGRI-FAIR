@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'rice_product.dart';
+import 'product.dart';
 
 class CartItem {
-  final RiceProduct product;
-  final RiceWeightOption weightOption;
+  final Product product;
+  final WeightTier weightOption;
   int quantity;
 
   CartItem({
@@ -12,8 +12,11 @@ class CartItem {
     this.quantity = 1,
   });
 
-  String get id => '${product.name}__${weightOption.label}';
-  double get itemTotal => weightOption.price * quantity;
+  /// Keyed by the product's real id, not its name. Two sellers may list rice
+  /// under the same name, and they are not the same line in a basket.
+  String get id => '${product.id}__${weightOption.label}';
+  double get unitPrice => product.priceFor(weightOption);
+  double get itemTotal => unitPrice * quantity;
 }
 
 class CartModel extends ChangeNotifier {
@@ -27,9 +30,9 @@ class CartModel extends ChangeNotifier {
   double get deliveryFee => _items.isEmpty ? 0 : 80;
   double get total => subtotal + deliveryFee;
 
-  void addItem(RiceProduct product, RiceWeightOption option, int quantity) {
+  void addItem(Product product, WeightTier option, int quantity) {
     final idx = _items.indexWhere(
-      (i) => i.product.name == product.name && i.weightOption.label == option.label,
+      (i) => i.product.id == product.id && i.weightOption.label == option.label,
     );
     if (idx >= 0) {
       _items[idx].quantity += quantity;

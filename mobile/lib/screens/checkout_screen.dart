@@ -85,7 +85,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               weight: i.weightOption.label,
               quantity: i.quantity,
               price: i.itemTotal,
-              tagColor: i.product.tagColor,
+              tagColor: AppColors.primaryLight,
             ),
           )
           .toList(),
@@ -498,12 +498,12 @@ class _OrderSummaryCard extends StatelessWidget {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: item.product.tagColor.withValues(alpha: 0.1),
+                      color: AppColors.primaryLight.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
                       Icons.rice_bowl_rounded,
-                      color: item.product.tagColor.withValues(alpha: 0.6),
+                      color: AppColors.primaryLight.withValues(alpha: 0.6),
                       size: 22,
                     ),
                   ),
