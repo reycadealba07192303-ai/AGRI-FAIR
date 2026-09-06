@@ -9,17 +9,17 @@ import '../models/user_model.dart';
 import '../services/api_client.dart';
 import '../services/product_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/agri_banner.dart';
 import '../widgets/clay.dart';
 import 'cart_screen.dart';
 import 'notifications_screen.dart';
 import 'product_detail_screen.dart';
 
-/// The storefront: rice first, from the database.
+/// The storefront.
 ///
-/// The showcase across the top is the rice itself rather than an offer. There
-/// is no promotions system behind this app, so a discount banner would either
-/// be invented or sit empty - and what a buyer opens a rice app to see is the
-/// rice.
+/// Across the top are three short notes about how buying here works, not an
+/// offer: there is no promotions system behind this app, so a discount banner
+/// would either be invented or sit empty.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -99,14 +99,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// The best of what is in stock, for the showcase. Ordered by how much has
-  /// actually sold, so it reflects what people buy rather than what was
-  /// listed most recently.
-  List<Product> get _showcase {
+  /// What to put in front of someone with nothing else to go on.
+  ///
+  /// There is no purchase history to personalise from yet, so this ranks by
+  /// what other buyers rated well and bought - which is a recommendation, not
+  /// a guess dressed up as one. Rating leads; sales break the ties, so a
+  /// single five-star review does not outrank a hundred sales.
+  List<Product> get _recommended {
     final inStock = _products.where((p) => p.inStock).toList()
-      ..sort((a, b) => b.soldCount.compareTo(a.soldCount));
+      ..sort((a, b) {
+        final byRating = b.averageRating.compareTo(a.averageRating);
+        return byRating != 0 ? byRating : b.soldCount.compareTo(a.soldCount);
+      });
 
-    return inStock.take(5).toList();
+    return inStock.take(6).toList();
   }
 
   /// Only the varieties a seller has actually listed. A chip that filters to
@@ -135,11 +141,17 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverToBoxAdapter(child: _header()),
               SliverToBoxAdapter(child: _searchBar()),
 
-              // While searching, the showcase and the variety chips are noise
-              // between the query and its answers.
+              // While searching, the banner, chips and recommendations are
+              // noise between the query and its answers.
               if (!_searching) ...[
-                SliverToBoxAdapter(child: _showcaseStrip()),
+                const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.only(top: 20),
+                    child: AgriBannerStrip(),
+                  ),
+                ),
                 SliverToBoxAdapter(child: _varietyRow()),
+                SliverToBoxAdapter(child: _recommendedStrip()),
               ],
 
               SliverToBoxAdapter(child: _gridHeading()),
@@ -263,31 +275,49 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _showcaseStrip() {
+  Widget _recommendedStrip() {
     if (_loading) {
       return const Padding(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+        padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
         child: ClaySkeleton(height: 170, radius: AppRadius.xl),
       );
     }
 
-    final showcase = _showcase;
-    if (showcase.isEmpty) return const SizedBox(height: 20);
+    final recommended = _recommended;
+    if (recommended.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 20),
-      child: SizedBox(
-        height: 170,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: showcase.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 14),
-          itemBuilder: (context, i) => _ShowcaseCard(
-            product: showcase[i],
-            onTap: () => _openProduct(showcase[i]),
+      padding: const EdgeInsets.only(top: 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Recommended',
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: AppColors.textDark,
+              ),
+            ),
           ),
-        ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 170,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: recommended.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: (context, i) => _ShowcaseCard(
+                product: recommended[i],
+                onTap: () => _openProduct(recommended[i]),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

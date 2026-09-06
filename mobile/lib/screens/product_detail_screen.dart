@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 
 import '../models/cart.dart';
 import '../models/product.dart';
+import '../models/review.dart';
 import '../services/api_client.dart';
 import '../services/product_service.dart';
+import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
+import '../widgets/review_overview.dart';
 import '../widgets/seller_card.dart';
 import 'cart_screen.dart';
 import 'product_reviews_screen.dart';
@@ -28,6 +31,7 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? _product;
+  ReviewSummary _reviews = ReviewSummary.empty;
   String? _error;
   bool _loading = true;
 
@@ -47,10 +51,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     });
 
     try {
-      final product = await ProductService.instance.byId(widget.productId);
+      // The reviews are part of deciding whether to buy, so they arrive with
+      // the product rather than after a second wait further down the page.
+      final results = await Future.wait([
+        ProductService.instance.byId(widget.productId),
+        ReviewService.instance
+            .forProduct(widget.productId)
+            // A product still reads fine without its reviews; losing the whole
+            // page because they failed would be the worse trade.
+            .catchError((_) => ReviewSummary.empty),
+      ]);
+
+      final product = results[0] as Product;
       if (!mounted) return;
 
       setState(() {
+        _reviews = results[1] as ReviewSummary;
         _product = product;
         // Start on the second tier where there is one: the smallest bag is
         // rarely what someone buying a sack of rice actually wants.
@@ -163,7 +179,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   ],
 
                   const SizedBox(height: 22),
-                  _reviewsRow(product),
+                  const _SectionHeading('What buyers said'),
+                  const SizedBox(height: 10),
+                  ReviewOverview(
+                    summary: _reviews,
+                    onSeeAll: _reviews.isEmpty
+                        ? null
+                        : () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => ProductReviewsScreen(
+                                  productName: product.name,
+                                ),
+                              ),
+                            ),
+                  ),
 
                   if (product.description.isNotEmpty) ...[
                     const SizedBox(height: 22),
@@ -416,52 +445,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           onTap: () => setState(() => _quantity++),
         ),
       ],
-    );
-  }
-
-  Widget _reviewsRow(Product product) {
-    return ClayCard(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          // Reviews still read from the local model; they move to
-          // /reviews/product/:id in Phase 7.
-          builder: (_) => ProductReviewsScreen(productName: product.name),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.reviews_rounded, size: 20, color: AppColors.primaryLight),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Reviews',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  product.reviewCount == 0
-                      ? 'No reviews yet'
-                      : '${product.reviewCount} ${product.reviewCount == 1 ? 'review' : 'reviews'}  ·  ★ ${product.averageRating}',
-                  style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const Icon(
-            Icons.chevron_right_rounded,
-            color: AppColors.textMuted,
-            size: 22,
-          ),
-        ],
-      ),
     );
   }
 
