@@ -52,3 +52,7 @@ testfile.txt
 
 # lokal na tool cache
 .qodo/
+
+# PSGC data is built, not written. Rebuild with:
+#   node src/scripts/buildPsgc.js
+# Committed anyway so a fresh clone works without a network fetch.
