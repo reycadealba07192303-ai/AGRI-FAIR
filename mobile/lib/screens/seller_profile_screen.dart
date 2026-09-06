@@ -10,6 +10,16 @@ import '../widgets/clay.dart';
 import 'chat_screen.dart';
 import 'product_detail_screen.dart';
 
+/// Two ways through the same shelf.
+enum _ShopTab {
+  popular('Popular'),
+  all('All Products');
+
+  const _ShopTab(this.label);
+
+  final String label;
+}
+
 /// A seller's shop: who they are in a few lines, then what they sell.
 ///
 /// The rice starts a single screen down. An earlier version stacked stats,
@@ -35,7 +45,7 @@ class SellerProfileScreen extends StatefulWidget {
 class _SellerProfileScreenState extends State<SellerProfileScreen> {
   SellerProfile? _profile;
   List<Product> _products = const [];
-  String _variety = '';
+  _ShopTab _tab = _ShopTab.popular;
   String? _error;
   bool _loading = true;
 
@@ -72,15 +82,28 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     }
   }
 
-  /// Only what this shop stocks. A tab that filters to nothing is a dead end.
-  List<String> get _varieties {
-    final present = _products.map((p) => p.variety).toSet().toList()..sort();
-    return ['', ...present];
-  }
+  /// The same listings, ordered two ways.
+  ///
+  /// Popular leads because it answers what a first-time visitor is asking -
+  /// what do people actually buy here - and All Products is the full shelf for
+  /// someone who already knows what they want.
+  List<Product> get _visible {
+    final list = List<Product>.from(_products);
 
-  List<Product> get _visible => _variety.isEmpty
-      ? _products
-      : _products.where((p) => p.variety == _variety).toList();
+    switch (_tab) {
+      case _ShopTab.popular:
+        list.sort((a, b) {
+          // Sales first, since that is what "popular" means. Rating settles
+          // ties so a shop with nothing sold yet is not ordered at random.
+          final bySold = b.soldCount.compareTo(a.soldCount);
+          return bySold != 0 ? bySold : b.averageRating.compareTo(a.averageRating);
+        });
+      case _ShopTab.all:
+        break;
+    }
+
+    return list;
+  }
 
   void _openProduct(Product product) {
     Navigator.of(context).push(
@@ -140,7 +163,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                   SliverToBoxAdapter(child: _identity()),
                   SliverToBoxAdapter(child: _stats()),
                   SliverToBoxAdapter(child: _actions()),
-                  SliverToBoxAdapter(child: _varietyTabs()),
+                  SliverToBoxAdapter(child: _shopTabs()),
                   _grid(),
                   const SliverToBoxAdapter(child: SizedBox(height: 28)),
                 ],
@@ -378,30 +401,23 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     );
   }
 
-  Widget _varietyTabs() {
+  Widget _shopTabs() {
     if (_loading || _products.isEmpty) return const SizedBox(height: 14);
 
-    final varieties = _varieties;
-    if (varieties.length <= 2) return const SizedBox(height: 20);
-
     return Padding(
-      padding: const EdgeInsets.only(top: 14, bottom: 4),
-      child: SizedBox(
-        height: 40,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: varieties.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 9),
-          itemBuilder: (context, i) {
-            final value = varieties[i];
-            return ClayChip(
-              label: value.isEmpty ? 'All' : value,
-              selected: _variety == value,
-              onTap: () => setState(() => _variety = value),
-            );
-          },
-        ),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 2),
+      child: Row(
+        children: [
+          for (final tab in _ShopTab.values) ...[
+            _TabButton(
+              label: tab.label,
+              count: tab == _ShopTab.all ? _products.length : null,
+              selected: _tab == tab,
+              onTap: () => setState(() => _tab = tab),
+            ),
+            const SizedBox(width: 22),
+          ],
+        ],
       ),
     );
   }
@@ -431,10 +447,8 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
           child: ClayCard(
             padding: const EdgeInsets.symmetric(vertical: 34),
             child: Center(
-              child: Text(
-                _products.isEmpty
-                    ? 'This shop has nothing listed right now.'
-                    : 'No $_variety in this shop.',
+              child: const Text(
+                'This shop has nothing listed right now.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   color: AppColors.textMuted,
@@ -530,6 +544,75 @@ class _Stat extends StatelessWidget {
           style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
         ),
       ],
+    );
+  }
+}
+
+/// An underlined tab rather than a filled pill.
+///
+/// These two switch how one list is ordered, not what the screen is. A pill
+/// would look like the variety filters elsewhere and promise a different set
+/// of rice.
+class _TabButton extends StatelessWidget {
+  const _TabButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+    this.count,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  final int? count;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.textDark : AppColors.textMuted;
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w500,
+                  letterSpacing: -0.2,
+                  color: color,
+                ),
+              ),
+              if (count != null) ...[
+                const SizedBox(width: 5),
+                Text(
+                  '$count',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 6),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            height: 3,
+            width: selected ? 26 : 0,
+            decoration: BoxDecoration(
+              color: AppColors.primaryMedium,
+              borderRadius: BorderRadius.circular(AppRadius.pill),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
