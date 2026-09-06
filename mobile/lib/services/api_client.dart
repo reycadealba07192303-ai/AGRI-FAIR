@@ -104,39 +104,43 @@ class ApiClient {
     };
   }
 
-  Uri _uri(String path, [Map<String, dynamic>? query]) {
+  Future<Uri> _uri(String path, [Map<String, dynamic>? query]) async {
+    // Resolved once per launch; later calls return the remembered answer
+    // immediately, so only the first request pays for the search.
+    final base = await ApiConfig.resolve();
     final clean = path.startsWith('/') ? path : '/$path';
     final params = query?.entries
         .where((e) => e.value != null && '${e.value}'.isNotEmpty)
         .map((e) => MapEntry(e.key, '${e.value}'));
 
-    return Uri.parse('${ApiConfig.baseUrl}$clean').replace(
+    return Uri.parse('$base$clean').replace(
       queryParameters: params == null || params.isEmpty
           ? null
           : Map.fromEntries(params),
     );
   }
 
-  Future<dynamic> get(String path, {Map<String, dynamic>? query}) =>
-      _send(() async => http.get(_uri(path, query), headers: await _headers()));
+  Future<dynamic> get(String path, {Map<String, dynamic>? query}) => _send(
+        () async => http.get(await _uri(path, query), headers: await _headers()),
+      );
 
   Future<dynamic> post(String path, [Map<String, dynamic>? body]) =>
       _send(() async => http.post(
-            _uri(path),
+            await _uri(path),
             headers: await _headers(),
             body: jsonEncode(body ?? {}),
           ));
 
   Future<dynamic> put(String path, [Map<String, dynamic>? body]) =>
       _send(() async => http.put(
-            _uri(path),
+            await _uri(path),
             headers: await _headers(),
             body: jsonEncode(body ?? {}),
           ));
 
   Future<dynamic> delete(String path, [Map<String, dynamic>? body]) =>
       _send(() async => http.delete(
-            _uri(path),
+            await _uri(path),
             headers: await _headers(),
             body: jsonEncode(body ?? {}),
           ));
@@ -148,21 +152,28 @@ class ApiClient {
     // read before the request rather than guessed after it.
     final hadToken = await hasToken;
 
+    // Read before the attempt: a failure forgets the address, and the message
+    // has to name the one that was actually tried.
+    final attempted = ApiConfig.baseUrl;
+
     try {
       response = await request().timeout(_timeout);
     } on SocketException {
-      // Naming the address turns an unanswerable complaint into something a
-      // person can check in one step.
+      // The address may simply be stale - the laptop moved networks, or the
+      // cable came out. Forgetting it means the next attempt searches again
+      // instead of retrying somewhere unreachable.
+      ApiConfig.forget();
+
       throw ApiException(
-        'Cannot reach ${ApiConfig.baseUrl}. '
-        'Is the backend running (npm run dev)? On a real phone the app must '
-        'be started with --dart-define=USE_LAN=true, and the phone has to be '
-        'on the same Wi-Fi as the laptop.',
+        'Cannot reach $attempted. Is the backend running (npm run dev)? '
+        'On a phone, either plug in the USB cable and run '
+        '"adb reverse tcp:8080 tcp:8080", or join the same Wi-Fi as the laptop.',
       );
     } on TimeoutException {
+      ApiConfig.forget();
       throw ApiException(
-        'No answer from ${ApiConfig.baseUrl} after 20 seconds. '
-        'The server may be starting up, or on a different network.',
+        'No answer from $attempted after 20 seconds. The server may be '
+        'starting up, or on a different network.',
       );
     }
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'models/cart.dart';
 import 'models/user_model.dart';
@@ -16,11 +18,10 @@ import 'screens/sign_in_screen.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
-  // Printed once at startup so a log always says which address this build is
-  // calling. Without it, "cannot reach the server" and "took too long" look
-  // identical whether the backend is down, the laptop moved networks, or the
-  // build simply aimed at the emulator address while running on a phone.
-  debugPrint('[agrifair] talking to ${ApiConfig.baseUrl}');
+  // Starts the search for a reachable backend while the first screen builds,
+  // so the address is usually settled before anything asks for it. ApiConfig
+  // logs which one won; every failure afterwards names the address it tried.
+  unawaited(ApiConfig.resolve());
 
   final user = UserModel();
 

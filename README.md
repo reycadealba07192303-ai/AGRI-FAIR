@@ -48,37 +48,40 @@ flutter pub get
 flutter run
 ```
 
-Ang `localhost` sa cellphone ay ang cellphone mismo, hindi ang laptop mo. Kaya:
+Ang `localhost` sa cellphone ay ang cellphone mismo, hindi ang laptop mo — kaya
+walang iisang address na tama sa lahat ng paraan ng pagpapatakbo. Sa halip na
+umasa sa build flag na madaling makalimutan, **hinahanap ng app kung alin ang
+sumasagot** sa unang request: ang USB tunnel muna, tapos ang emulator address,
+tapos ang Wi-Fi. Sinasabi sa log kung alin ang napili:
 
-- **Android emulator** — `http://10.0.2.2:8080`, ito na ang default
-- **Totoong cellphone, USB** — pinakamaaasahan, at hindi alintana ang network:
+```
+[agrifair] using http://localhost:8080/api
+```
+
+Kaya sa karaniwan, `flutter run` lang. Para sa totoong cellphone, itayo muna
+ang tunnel — pinakamaaasahan ito, at hindi alintana ang network:
 
 ```bash
 adb reverse tcp:8080 tcp:8080
+flutter run
+```
+
+Idinadaan nito sa cable ang sariling `localhost:8080` ng cellphone papunta sa
+laptop. Gumagana kahit magkaibang network kayo — mobile data, ibang Wi-Fi, o
+wala man. Kailangan lang ay nakabukas ang USB debugging. **Uulitin ang `adb
+reverse` sa tuwing tatanggalin at isasaksak ulit ang cable.**
+
+Kung ayaw mong nakasaksak, sapat na ang magkaparehong Wi-Fi — mahahanap din ito
+ng app, basta tama ang `lanHost` sa `lib/services/api_config.dart`. Galing iyon
+sa DHCP, kaya nagbabago kapag lumipat ng network ang laptop (`ipconfig`,
+tingnan ang IPv4 ng Wi-Fi adapter). Kapag nagpalit, **dalawa** ang inaayos: ang
+`lanHost` at ang `android/app/src/main/res/xml/network_security_config.xml`.
+
+Puwede ring pilitin ang isa, kung ayaw mo ng paghahanap:
+
+```bash
 flutter run --dart-define=USE_ADB=true
-```
-
-  Idinadaan nito sa cable ang sariling `localhost:8080` ng cellphone papunta sa
-  laptop. Gumagana kahit magkaibang network kayo — mobile data, ibang Wi-Fi, o
-  wala man. Kailangan lang ay nakabukas ang USB debugging at nakasaksak ang
-  cable. **Uulitin ang `adb reverse` sa tuwing tatanggalin at isasaksak ulit
-  ang cable**, o kapag nag-restart ang adb.
-
-- **Totoong cellphone, Wi-Fi** — magkaparehong network kayo:
-
-```bash
 flutter run --dart-define=USE_LAN=true
-```
-
-Ang address ay nasa `lanHost` sa `lib/services/api_config.dart`. Galing ito sa
-DHCP, kaya nagbabago kapag nag-reconnect ang laptop — kapag bigla nang hindi
-maabot ang server, dyan ka unang tumingin (`ipconfig`, tingnan ang IPv4 ng
-Wi-Fi adapter). Kapag nagpalit, **dalawa** ang inaayos: ang `lanHost` at ang
-`android/app/src/main/res/xml/network_security_config.xml`.
-
-Puwede ring buong URL nang hindi ginagalaw ang code:
-
-```bash
 flutter run --dart-define=API_BASE_URL=http://192.168.1.14:8080/api
 ```
 
