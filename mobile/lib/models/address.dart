@@ -15,6 +15,8 @@ class Address {
     this.barangay = '',
     this.province = '',
     this.notes = '',
+    this.provinceCode = '',
+    this.cityCode = '',
   });
 
   final String id;
@@ -27,6 +29,11 @@ class Address {
   final String barangay;
   final String city;
   final String province;
+
+  /// PSGC codes. The names are what a rider reads; these are what lets the
+  /// picker reopen on the right lists when this address is edited.
+  final String provinceCode;
+  final String cityCode;
 
   /// "Green gate beside the sari-sari store" - what actually gets a rider to
   /// the door.
@@ -60,6 +67,8 @@ class Address {
       city: (json['city'] ?? '').toString(),
       province: (json['province'] ?? '').toString(),
       notes: (json['notes'] ?? '').toString(),
+      provinceCode: (json['provinceCode'] ?? '').toString(),
+      cityCode: (json['cityCode'] ?? '').toString(),
       isDefault: json['isDefault'] == true,
     );
   }
@@ -73,6 +82,8 @@ class Address {
         'city': city,
         'province': province,
         'notes': notes,
+        'provinceCode': provinceCode,
+        'cityCode': cityCode,
         'isDefault': isDefault,
       };
 }

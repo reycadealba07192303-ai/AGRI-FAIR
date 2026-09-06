@@ -150,6 +150,15 @@ const userSchema = new mongoose.Schema({
     barangay: { type: String, trim: true, default: '' },
     city: { type: String, trim: true, required: true },
     province: { type: String, trim: true, default: '' },
+
+    /**
+     * PSGC codes for the province and city. The names are what a rider reads;
+     * these are what lets the picker reopen on the right lists when someone
+     * edits a saved address, without matching on a name that may have been
+     * typed before the lists existed.
+     */
+    provinceCode: { type: String, trim: true, default: '' },
+    cityCode: { type: String, trim: true, default: '' },
     // "Green gate beside the sari-sari store" - what actually gets a rider
     // to the door.
     notes: { type: String, trim: true, default: '' },

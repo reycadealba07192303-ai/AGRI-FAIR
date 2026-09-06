@@ -27,6 +27,8 @@ function clean(payload = {}) {
     barangay: text(payload.barangay),
     city: text(payload.city),
     province: text(payload.province),
+    provinceCode: text(payload.provinceCode),
+    cityCode: text(payload.cityCode),
     notes: text(payload.notes),
   };
 }
