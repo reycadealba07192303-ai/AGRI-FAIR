@@ -20,12 +20,14 @@ enum _ShopTab {
   final String label;
 }
 
-/// A seller's shop: who they are in a few lines, then what they sell.
+/// A seller's shop: one card about them, then the rice.
 ///
-/// The rice starts a single screen down. An earlier version stacked stats,
-/// credentials, farm details and a bio above the listings, so a buyer who came
-/// to see the goods had to scroll past four cards about the shop first.
-/// Everything but the essentials now lives behind "Shop info".
+/// An earlier version stacked an avatar, a centred name, a row of three large
+/// statistics and two full-width buttons before any listing appeared. It
+/// pushed the goods most of a screen down, and looked emptiest exactly when a
+/// shop was new - three big zeroes under three headings. One card says the
+/// same things in a third of the height and reads the same whether a seller
+/// has one listing or two hundred.
 class SellerProfileScreen extends StatefulWidget {
   const SellerProfileScreen({
     super.key,
@@ -43,6 +45,8 @@ class SellerProfileScreen extends StatefulWidget {
 }
 
 class _SellerProfileScreenState extends State<SellerProfileScreen> {
+  static const double _bannerHeight = 132;
+
   SellerProfile? _profile;
   List<Product> _products = const [];
   _ShopTab _tab = _ShopTab.popular;
@@ -90,16 +94,13 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   List<Product> get _visible {
     final list = List<Product>.from(_products);
 
-    switch (_tab) {
-      case _ShopTab.popular:
-        list.sort((a, b) {
-          // Sales first, since that is what "popular" means. Rating settles
-          // ties so a shop with nothing sold yet is not ordered at random.
-          final bySold = b.soldCount.compareTo(a.soldCount);
-          return bySold != 0 ? bySold : b.averageRating.compareTo(a.averageRating);
-        });
-      case _ShopTab.all:
-        break;
+    if (_tab == _ShopTab.popular) {
+      list.sort((a, b) {
+        // Sales first, since that is what popular means. Rating settles ties
+        // so a shop with nothing sold yet is not ordered at random.
+        final bySold = b.soldCount.compareTo(a.soldCount);
+        return bySold != 0 ? bySold : b.averageRating.compareTo(a.averageRating);
+      });
     }
 
     return list;
@@ -117,7 +118,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   ///
   /// These matter when a buyer is deciding whether to trust the shop, which is
   /// not most of the time they spend here - so they are one tap away rather
-  /// than four cards deep.
+  /// than in the way of the rice.
   void _showShopInfo() {
     final profile = _profile;
     if (profile == null) return;
@@ -159,10 +160,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
               color: AppColors.primaryMedium,
               child: CustomScrollView(
                 slivers: [
-                  SliverToBoxAdapter(child: _hero()),
-                  SliverToBoxAdapter(child: _identity()),
-                  SliverToBoxAdapter(child: _stats()),
-                  SliverToBoxAdapter(child: _actions()),
+                  SliverToBoxAdapter(child: _header()),
                   SliverToBoxAdapter(child: _shopTabs()),
                   _grid(),
                   const SliverToBoxAdapter(child: SizedBox(height: 28)),
@@ -172,102 +170,239 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     );
   }
 
-  static const double _bannerHeight = 172;
-  static const double _avatarSize = 76;
-
-  /// Banner and avatar in one box.
+  /// Banner behind, card in front, both in one box.
   ///
-  /// The avatar has to overlap the banner's edge, and a sliver clips anything
-  /// that leaves its own bounds - so both live in one Stack tall enough to
-  /// hold the overlap, rather than the avatar being nudged upward out of the
-  /// sliver below and having its top cut off.
-  Widget _hero() {
+  /// A sliver clips whatever leaves its bounds, so the card that overlaps the
+  /// banner has to share a Stack with it rather than being nudged up out of
+  /// the sliver below.
+  Widget _header() {
+    return Stack(
+      children: [
+        SizedBox(
+          height: _bannerHeight + 58,
+          width: double.infinity,
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: SizedBox(height: _bannerHeight, child: _banner()),
+          ),
+        ),
+        Positioned(left: 18, right: 18, bottom: 0, child: _shopCard()),
+        _floatingBar(),
+      ],
+    );
+  }
+
+  Widget _banner() {
     final profile = _profile;
     final farmPhoto = profile != null && profile.farmPhotoUrls.isNotEmpty
         ? profile.farmPhotoUrls.first
         : '';
 
-    return SizedBox(
-      height: _bannerHeight + _avatarSize / 2,
-      child: Stack(
-        children: [
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: _bannerHeight,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (farmPhoto.isEmpty)
-                  // Sellers rarely upload a farm photo, and a blank green band
-                  // reads as a loading bug. A field stands in for one.
-                  Image.asset(
-                    'assets/banners/ricefarm2.jpg',
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, _, _) =>
-                        Container(color: AppColors.primaryDark),
-                  )
-                else
-                  CachedNetworkImage(
-                    imageUrl: farmPhoto,
-                    fit: BoxFit.cover,
-                    errorWidget: (_, _, _) => Image.asset(
-                      'assets/banners/ricefarm2.jpg',
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, _, _) =>
-                          Container(color: AppColors.primaryDark),
-                    ),
-                    placeholder: (_, _) =>
-                        Container(color: AppColors.surfaceSunken),
-                  ),
-                const DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Color(0x66101A14), Color(0x14101A14)],
-                    ),
-                  ),
-                ),
-              ],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (farmPhoto.isEmpty)
+          // Sellers rarely upload a farm photo, and a blank band reads as a
+          // loading bug. A field stands in for one.
+          Image.asset(
+            'assets/banners/ricefarm2.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => Container(color: AppColors.primaryDark),
+          )
+        else
+          CachedNetworkImage(
+            imageUrl: farmPhoto,
+            fit: BoxFit.cover,
+            errorWidget: (_, _, _) => Image.asset(
+              'assets/banners/ricefarm2.jpg',
+              fit: BoxFit.cover,
+              errorBuilder: (_, _, _) =>
+                  Container(color: AppColors.primaryDark),
+            ),
+            placeholder: (_, _) => Container(color: AppColors.surfaceSunken),
+          ),
+        const DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0x59101A14), Color(0x14101A14)],
             ),
           ),
+        ),
+      ],
+    );
+  }
 
-          Positioned(
-            top: _bannerHeight - _avatarSize / 2,
-            left: 0,
-            right: 0,
-            child: Center(child: _avatar()),
+  Widget _shopCard() {
+    final profile = _profile;
+
+    return ClayCard(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _avatar(),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            profile?.displayName ?? widget.initialName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                        if (profile?.isVerified ?? false) ...[
+                          const SizedBox(width: 5),
+                          const Icon(
+                            Icons.verified_rounded,
+                            size: 16,
+                            color: AppColors.primaryMedium,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _subtitle(profile),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 7),
+                    _statLine(profile),
+                  ],
+                ),
+              ),
+            ],
           ),
-
-          _floatingBar(),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 11),
+          Row(
+            children: [
+              Expanded(
+                child: _MiniAction(
+                  icon: Icons.chat_bubble_rounded,
+                  label: 'Chat',
+                  filled: true,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const ChatScreen()),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _MiniAction(
+                  icon: Icons.info_outline_rounded,
+                  label: 'Shop info',
+                  onTap: profile == null ? null : _showShopInfo,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
+  String _subtitle(SellerProfile? profile) {
+    if (profile == null) return '';
+
+    return [
+      profile.sellerTypeLabel,
+      if (profile.farmLocation.isNotEmpty) profile.farmLocation,
+    ].join('  ·  ');
+  }
+
+  /// Rating, listings and sales on one line.
+  ///
+  /// A new shop reads as "New shop" and a listing count, rather than three
+  /// zeroes under three headings - which is how the old block of statistics
+  /// looked for every seller who had not sold anything yet.
+  Widget _statLine(SellerProfile? profile) {
+    if (profile == null) return const ClaySkeleton(height: 13, width: 150);
+
+    return Row(
+      children: [
+        if (profile.averageRating > 0) ...[
+          const Icon(Icons.star_rounded, size: 14, color: AppColors.accent),
+          const SizedBox(width: 3),
+          Text(
+            '${profile.averageRating}',
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          Text(
+            ' (${profile.reviewCount})',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        ] else
+          const Text(
+            'New shop',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.primaryMedium,
+            ),
+          ),
+        const _Dot(),
+        Flexible(
+          child: Text(
+            _plural(profile.productCount, 'listing'),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        ),
+        if (profile.totalSold > 0) ...[
+          const _Dot(),
+          Text(
+            '${profile.totalSold} sold',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+        ],
+      ],
+    );
+  }
+
   Widget _avatar() {
     final profile = _profile;
+    const size = 52.0;
 
     return Container(
-      height: _avatarSize,
-      width: _avatarSize,
+      height: size,
+      width: size,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        shape: BoxShape.circle,
-        // A ring in the page colour separates the avatar from the photograph
-        // behind it, whatever that photograph happens to be.
-        border: Border.all(color: AppColors.background, width: 4),
-        boxShadow: AppShadows.raised,
+        color: AppColors.surfaceSunken,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        boxShadow: AppShadows.subtle,
       ),
       clipBehavior: Clip.antiAlias,
       child: _loading
-          ? const ClaySkeleton(
-              height: _avatarSize,
-              width: _avatarSize,
-              radius: 99,
-            )
+          ? const ClaySkeleton(height: size, width: size)
           : profile!.avatarUrl.isEmpty
               ? _avatarInitial(profile.displayName)
               : CachedNetworkImage(
@@ -288,7 +423,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
           alignment: Alignment.topLeft,
           child: ClayIconButton(
             icon: Icons.arrow_back_rounded,
-            size: 40,
+            size: 38,
             onPressed: () => Navigator.of(context).maybePop(),
           ),
         ),
@@ -296,143 +431,11 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     );
   }
 
-  Widget _identity() {
-    final profile = _profile;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(
-                child: Text(
-                  profile?.displayName ?? widget.initialName,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-              if (profile?.isVerified ?? false) ...[
-                const SizedBox(width: 6),
-                const Icon(
-                  Icons.verified_rounded,
-                  size: 19,
-                  color: AppColors.primaryMedium,
-                ),
-              ],
-            ],
-          ),
-          if (profile != null && profile.farmLocation.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.place_rounded,
-                  size: 12,
-                  color: AppColors.textMuted,
-                ),
-                const SizedBox(width: 3),
-                Flexible(
-                  child: Text(
-                    profile.farmLocation,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _stats() {
-    final profile = _profile;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-        child: ClayCard(
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: _Stat(
-                  value: '${profile?.productCount ?? 0}',
-                  label: 'Listings',
-                ),
-              ),
-              const _StatDivider(),
-              Expanded(
-                child: _Stat(
-                  value: _compact(profile?.totalSold ?? 0),
-                  label: 'Sold',
-                ),
-              ),
-              const _StatDivider(),
-              Expanded(
-                child: _Stat(
-                  value: (profile?.averageRating ?? 0) > 0
-                      ? '${profile!.averageRating}'
-                      : '—',
-                  label: (profile?.reviewCount ?? 0) == 1
-                      ? '1 review'
-                      : '${profile?.reviewCount ?? 0} reviews',
-                  icon: Icons.star_rounded,
-                ),
-              ),
-            ],
-          ),
-        ),
-    );
-  }
-
-  Widget _actions() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-        child: Row(
-          children: [
-            Expanded(
-              child: ClayButton(
-                label: 'Chat',
-                icon: Icons.chat_bubble_rounded,
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ChatScreen()),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ClayButton(
-                label: 'Shop info',
-                filled: false,
-                icon: Icons.info_outline_rounded,
-                onPressed: _profile == null ? null : _showShopInfo,
-              ),
-            ),
-          ],
-        ),
-    );
-  }
-
   Widget _shopTabs() {
-    if (_loading || _products.isEmpty) return const SizedBox(height: 14);
+    if (_loading || _products.isEmpty) return const SizedBox(height: 16);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 2),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 2),
       child: Row(
         children: [
           for (final tab in _ShopTab.values) ...[
@@ -452,7 +455,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   Widget _grid() {
     if (_loading) {
       return const SliverPadding(
-        padding: EdgeInsets.fromLTRB(20, 14, 20, 0),
+        padding: EdgeInsets.fromLTRB(20, 16, 20, 0),
         sliver: SliverToBoxAdapter(
           child: Row(
             children: [
@@ -470,17 +473,14 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     if (products.isEmpty) {
       return SliverToBoxAdapter(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
           child: ClayCard(
             padding: const EdgeInsets.symmetric(vertical: 34),
-            child: Center(
-              child: const Text(
+            child: const Center(
+              child: Text(
                 'This shop has nothing listed right now.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.textMuted,
-                  fontSize: 13.5,
-                ),
+                style: TextStyle(color: AppColors.textMuted, fontSize: 13.5),
               ),
             ),
           ),
@@ -489,7 +489,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     }
 
     return SliverPadding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       sliver: SliverGrid(
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -517,7 +517,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
         child: Text(
           letter,
           style: const TextStyle(
-            fontSize: 28,
+            fontSize: 22,
             fontWeight: FontWeight.w800,
             color: AppColors.primaryMedium,
           ),
@@ -526,51 +526,74 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     );
   }
 
-  static String _compact(int value) {
-    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}m';
-    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}k';
-    return '$value';
-  }
+  static String _plural(int count, String noun) =>
+      '$count ${count == 1 ? noun : '${noun}s'}';
 }
 
-class _Stat extends StatelessWidget {
-  const _Stat({required this.value, required this.label, this.icon});
-
-  final String value;
-  final String label;
-  final IconData? icon;
+class _Dot extends StatelessWidget {
+  const _Dot();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 16, color: AppColors.accent),
-              const SizedBox(width: 3),
-            ],
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textDark,
-                letterSpacing: -0.4,
-              ),
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 7),
+      child: Text(
+        '·',
+        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+      ),
+    );
+  }
+}
+
+/// A short action inside the shop card. Small enough that two fit on one row,
+/// where two full-width buttons cost a whole row each.
+class _MiniAction extends StatelessWidget {
+  const _MiniAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.filled = false,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onTap;
+  final bool filled;
+
+  @override
+  Widget build(BuildContext context) {
+    final background =
+        filled ? AppColors.primaryMedium : AppColors.surfaceSunken;
+    final foreground = filled ? Colors.white : AppColors.textDark;
+
+    return Opacity(
+      opacity: onTap == null ? 0.5 : 1,
+      child: Material(
+        color: background,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 11),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, size: 15, color: foreground),
+                const SizedBox(width: 7),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: foreground,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-        const SizedBox(height: 2),
-        Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -640,19 +663,6 @@ class _TabButton extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StatDivider extends StatelessWidget {
-  const _StatDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 30,
-      width: 1,
-      color: const Color(0xFFD7DED4),
     );
   }
 }
@@ -930,15 +940,11 @@ class _ShopInfoSheet extends StatelessWidget {
           ],
           if (profile.acceptsGcash) ...[
             const SizedBox(height: 6),
-            Row(
+            const Row(
               children: [
-                const Icon(
-                  Icons.qr_code_rounded,
-                  size: 15,
-                  color: AppColors.accent,
-                ),
-                const SizedBox(width: 9),
-                const Text(
+                Icon(Icons.qr_code_rounded, size: 15, color: AppColors.accent),
+                SizedBox(width: 9),
+                Text(
                   'Accepts GCash',
                   style: TextStyle(fontSize: 13, color: AppColors.textBody),
                 ),
