@@ -1,6 +1,7 @@
 // src/services/productService.js
 import { productRepository } from '../repositories/productRepository.js';
 import { getRatingMapForProducts } from '../repositories/reviewRepository.js';
+import { sellerService } from './sellerService.js';
 
 const NO_RATING = { averageRating: 0, reviewCount: 0 };
 
@@ -44,7 +45,28 @@ export const productService = {
       throw new Error('Product not found');
     }
 
-    return await withRatings(product);
+    const withRating = await withRatings(product);
+
+    // The detail screen shows a seller card straight away, so a small summary
+    // rides along rather than costing a second round trip. Tapping it fetches
+    // the full profile from /sellers/:id.
+    try {
+      const seller = await sellerService.getPublicProfile(product.createdBy);
+      withRating.seller = {
+        id: seller.id,
+        name: seller.name,
+        avatarUrl: seller.avatarUrl,
+        businessName: seller.businessName,
+        isVerified: seller.isVerified,
+        averageRating: seller.averageRating,
+        productCount: seller.productCount,
+      };
+    } catch {
+      // A product whose seller was removed is still a product worth showing.
+      withRating.seller = null;
+    }
+
+    return withRating;
   },
 
   // Create new product
