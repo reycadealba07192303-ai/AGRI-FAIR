@@ -7,7 +7,11 @@ plugins {
 
 android {
     namespace = "com.example.mobile_app"
-    compileSdk = flutter.compileSdkVersion
+    // Pinned rather than following flutter.compileSdkVersion: the secure
+    // storage plugin needs 37, and the Flutter default trails it. Raise this
+    // when a plugin asks for more; it only affects what the code is compiled
+    // against, not the minimum Android it runs on.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
