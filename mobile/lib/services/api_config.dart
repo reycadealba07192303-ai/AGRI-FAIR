@@ -8,18 +8,33 @@ import 'package:flutter/foundation.dart';
 /// running the server — the single most common reason the app "cannot reach
 /// the server" while the same URL works fine in a browser.
 class ApiConfig {
-  /// Override at build time without touching the file:
+  /// Override the whole URL at build time without touching the file:
   ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.14:8080/api
   static const String _override = String.fromEnvironment('API_BASE_URL');
 
+  /// Run against [lanHost] instead of the emulator address:
+  ///   flutter run --dart-define=USE_LAN=true
+  ///
+  /// This is what a real phone needs. Without it an Android build always aims
+  /// at 10.0.2.2, which only exists inside the emulator, and the app fails to
+  /// reach the server with no obvious reason why.
+  static const bool _useLan = bool.fromEnvironment('USE_LAN');
+
   static const int port = 8080;
 
-  /// Set this to the laptop's LAN IP to run on a real phone over Wi-Fi.
-  /// Find it with `ipconfig` (Windows) and use the IPv4 address.
-  static const String lanHost = '192.168.1.2';
+  /// The laptop's LAN IP, used when the app runs on a real phone over Wi-Fi.
+  ///
+  /// This is the machine serving the backend, not the phone: the phone dials
+  /// the laptop. It comes from DHCP, so it can change after a reconnect - when
+  /// the app suddenly cannot reach the server, check this first with
+  /// `ipconfig` and look at the Wi-Fi adapter's IPv4 address.
+  static const String lanHost = '192.168.254.114';
 
   static String get baseUrl {
     if (_override.isNotEmpty) return _override;
+
+    // A real device has to dial the laptop by its address on the network.
+    if (_useLan) return 'http://$lanHost:$port/api';
 
     // The Android emulator reaches the host machine through 10.0.2.2; the iOS
     // simulator shares the Mac's own network stack, so localhost is correct.
