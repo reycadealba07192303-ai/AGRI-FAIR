@@ -19,11 +19,19 @@ class OtpVerificationScreen extends StatefulWidget {
   final String fullName;
   final OtpPurpose purpose;
 
+  /// Ask for a code as the screen opens.
+  ///
+  /// Set when arriving from a blocked sign-in, where no code was requested
+  /// yet. Sign-up does not need it - registering already sent one - and asking
+  /// again there would spend a slot from the resend allowance for nothing.
+  final bool sendOnOpen;
+
   const OtpVerificationScreen({
     super.key,
     required this.email,
     required this.fullName,
     this.purpose = OtpPurpose.signup,
+    this.sendOnOpen = false,
   });
 
   bool get isReset => purpose == OtpPurpose.passwordReset;
@@ -52,6 +60,27 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       c.addListener(() => setState(() {}));
     }
     _startResendTimer();
+
+    if (widget.sendOnOpen) {
+      // Not awaited: the boxes are usable immediately and the code is valid
+      // the moment the server stores it, so there is nothing to wait for.
+      _requestCode();
+    }
+  }
+
+  Future<void> _requestCode() async {
+    try {
+      final message = widget.isReset
+          ? await AuthService.instance.forgotPassword(widget.email)
+          : await AuthService.instance.resendVerification(widget.email);
+
+      if (!mounted) return;
+      _notify(message);
+    } on ApiException catch (err) {
+      if (!mounted) return;
+      // Resend is right there, so this is worth saying but not worth blocking.
+      _notify(err.message);
+    }
   }
 
   @override

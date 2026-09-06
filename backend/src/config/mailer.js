@@ -20,6 +20,17 @@ export function getMailer() {
     port: Number(SMTP_PORT) || 587,
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+
+    // Without pooling, every message pays for a fresh TCP connection, TLS
+    // handshake and login to Gmail - most of the several seconds a send used
+    // to take. Held open, later messages skip all of it.
+    pool: true,
+    maxConnections: 3,
+
+    // A hung SMTP connection must not hold a request forever.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
   });
 
   return transporter;

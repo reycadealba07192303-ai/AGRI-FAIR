@@ -91,8 +91,17 @@ export const otpService = {
     await otpRepository.consumeAllFor(cleanEmail, purpose);
     await otpRepository.create({ email: cleanEmail, purpose, codeHash, expiresAt });
 
+    // The code is valid the moment it is stored; the email is only delivery.
+    // Waiting for Gmail to accept it added five or six seconds to every
+    // signup and resend - long enough that phones on a slow link gave up and
+    // reported a timeout for a request that had already succeeded.
+    //
+    // A failed send is logged rather than thrown: the caller has already been
+    // told a code is on its way, and the screen it lands on can resend.
     const { subject, html } = TEMPLATES[purpose](name, code);
-    await sendMail({ to: cleanEmail, subject, html });
+    sendMail({ to: cleanEmail, subject, html }).catch((err) => {
+      console.error(`[otp] could not deliver ${purpose} code to ${cleanEmail}:`, err.message);
+    });
 
     return { sent: true };
   },

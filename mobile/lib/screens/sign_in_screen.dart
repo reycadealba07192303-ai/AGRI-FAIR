@@ -68,21 +68,19 @@ class _SignInScreenState extends State<SignInScreen> {
     }
   }
 
-  Future<void> _goToVerification(String email, String message) async {
+  void _goToVerification(String email, String message) {
     _notify(message);
 
-    // Whatever code was mailed at signup may be long expired, so this detour
-    // starts by sending a fresh one.
-    try {
-      await AuthService.instance.resendVerification(email);
-    } on ApiException {
-      // The OTP screen can resend on its own, so a failure here is not fatal.
-    }
-
-    if (!mounted) return;
+    // Straight to the boxes. The screen asks for the code itself as it opens,
+    // so nothing here waits on the network - holding the person on a spinner
+    // while an email is dispatched is what made this feel like a timeout.
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => OtpVerificationScreen(email: email, fullName: ''),
+        builder: (_) => OtpVerificationScreen(
+          email: email,
+          fullName: '',
+          sendOnOpen: true,
+        ),
       ),
     );
   }
