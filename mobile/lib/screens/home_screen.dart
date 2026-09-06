@@ -11,9 +11,15 @@ import '../services/product_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
 import 'cart_screen.dart';
+import 'notifications_screen.dart';
 import 'product_detail_screen.dart';
 
-/// The storefront: what is for sale right now, from the database.
+/// The storefront: rice first, from the database.
+///
+/// The showcase across the top is the rice itself rather than an offer. There
+/// is no promotions system behind this app, so a discount banner would either
+/// be invented or sit empty - and what a buyer opens a rice app to see is the
+/// rice.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -93,6 +99,28 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// The best of what is in stock, for the showcase. Ordered by how much has
+  /// actually sold, so it reflects what people buy rather than what was
+  /// listed most recently.
+  List<Product> get _showcase {
+    final inStock = _products.where((p) => p.inStock).toList()
+      ..sort((a, b) => b.soldCount.compareTo(a.soldCount));
+
+    return inStock.take(5).toList();
+  }
+
+  /// Only the varieties a seller has actually listed. A chip that filters to
+  /// an empty screen is a dead end, so kinds nobody stocks are left out.
+  List<RiceVariety> get _stockedVarieties {
+    final present = _products.map((p) => p.variety).toSet();
+
+    return RiceVariety.values
+        .where((v) => v == RiceVariety.all || present.contains(v.value))
+        .toList();
+  }
+
+  bool get _searching => _searchController.text.trim().isNotEmpty;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -106,8 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
             slivers: [
               SliverToBoxAdapter(child: _header()),
               SliverToBoxAdapter(child: _searchBar()),
-              SliverToBoxAdapter(child: _varietyRow()),
-              const SliverToBoxAdapter(child: SizedBox(height: 18)),
+
+              // While searching, the showcase and the variety chips are noise
+              // between the query and its answers.
+              if (!_searching) ...[
+                SliverToBoxAdapter(child: _showcaseStrip()),
+                SliverToBoxAdapter(child: _varietyRow()),
+              ],
+
+              SliverToBoxAdapter(child: _gridHeading()),
               _grid(),
               const SliverToBoxAdapter(child: SizedBox(height: 28)),
             ],
@@ -119,9 +154,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _header() {
     final user = UserModel.of(context);
+    final address = user.deliveryAddress.trim();
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
       child: Row(
         children: [
           Expanded(
@@ -129,32 +165,60 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Kumusta, ${user.displayName}',
+                  'Hi, ${user.displayName}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 13.5,
-                    color: AppColors.textMuted,
-                    fontWeight: FontWeight.w500,
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: AppColors.textDark,
                   ),
                 ),
                 const SizedBox(height: 3),
-                const Text(
-                  'Find your rice',
-                  style: TextStyle(
-                    fontSize: 27,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
-                    color: AppColors.textDark,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      address.isEmpty
+                          ? Icons.add_location_alt_outlined
+                          : Icons.place_rounded,
+                      size: 13,
+                      color: AppColors.primaryMedium,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        // An empty address is an invitation, not a blank: it
+                        // is needed at checkout anyway.
+                        address.isEmpty ? 'Add a delivery address' : address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          ClayIconButton(
+            icon: Icons.notifications_none_rounded,
+            size: 42,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+          ),
+          const SizedBox(width: 8),
           AnimatedBuilder(
             animation: CartModel.of(context),
             builder: (context, _) => ClayIconButton(
               icon: Icons.shopping_cart_rounded,
+              size: 42,
               badge: CartModel.of(context).totalCount,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const CartScreen()),
@@ -181,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
             color: AppColors.textMuted,
             size: 21,
           ),
-          suffixIcon: _searchController.text.isEmpty
+          suffixIcon: !_searching
               ? null
               : IconButton(
                   icon: const Icon(
@@ -199,25 +263,114 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _varietyRow() {
+  Widget _showcaseStrip() {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, 0),
+        child: ClaySkeleton(height: 170, radius: AppRadius.xl),
+      );
+    }
+
+    final showcase = _showcase;
+    if (showcase.isEmpty) return const SizedBox(height: 20);
+
     return Padding(
-      padding: const EdgeInsets.only(top: 18),
+      padding: const EdgeInsets.only(top: 20),
       child: SizedBox(
-        height: 42,
+        height: 170,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: RiceVariety.values.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 9),
-          itemBuilder: (context, i) {
-            final variety = RiceVariety.values[i];
-            return ClayChip(
-              label: variety.label,
-              selected: _variety == variety.value,
-              onTap: () => _selectVariety(variety.value),
-            );
-          },
+          itemCount: showcase.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 14),
+          itemBuilder: (context, i) => _ShowcaseCard(
+            product: showcase[i],
+            onTap: () => _openProduct(showcase[i]),
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _varietyRow() {
+    final varieties = _stockedVarieties;
+    if (varieties.length <= 1) return const SizedBox(height: 8);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 26),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20),
+            child: Text(
+              'Varieties',
+              style: TextStyle(
+                fontSize: 16.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.3,
+                color: AppColors.textDark,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            height: 86,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: varieties.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 14),
+              itemBuilder: (context, i) => _VarietyDisc(
+                variety: varieties[i],
+                selected: _variety == varieties[i].value,
+                onTap: () => _selectVariety(varieties[i].value),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _gridHeading() {
+    if (_loading || _error != null) return const SizedBox(height: 24);
+
+    final label = _searching
+        ? 'Results'
+        : _variety.isEmpty
+            ? 'All rice'
+            : RiceVariety.values
+                .firstWhere(
+                  (v) => v.value == _variety,
+                  orElse: () => RiceVariety.all,
+                )
+                .label;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 26, 20, 14),
+      child: Row(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 16.5,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.3,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_products.isNotEmpty)
+            Text(
+              '${_products.length}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -264,18 +417,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (_products.isEmpty) {
-      final searching = _searchController.text.trim().isNotEmpty;
-
       return SliverFillRemaining(
         hasScrollBody: false,
         child: ClayEmptyState(
-          icon: searching ? Icons.search_off_rounded : Icons.storefront_outlined,
-          title: searching ? 'No rice matched' : 'Nothing here yet',
-          message: searching
+          icon: _searching ? Icons.search_off_rounded : Icons.storefront_outlined,
+          title: _searching ? 'No rice matched' : 'Nothing here yet',
+          message: _searching
               ? 'Try a different word, or clear the search to see everything.'
-              : 'No seller has listed rice of this kind yet. Check another variety.',
-          actionLabel: searching ? 'Clear search' : null,
-          onAction: searching
+              : 'No seller has listed rice of this kind yet. Try another variety.',
+          actionLabel: _searching ? 'Clear search' : null,
+          onAction: _searching
               ? () {
                   _searchController.clear();
                   _load();
@@ -301,6 +452,213 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           childCount: _products.length,
         ),
+      ),
+    );
+  }
+}
+
+/// A wide card for the strip across the top: the photo carries it, with the
+/// name and price laid over a scrim so they stay readable on any image.
+class _ShowcaseCard extends StatelessWidget {
+  const _ShowcaseCard({required this.product, required this.onTap});
+
+  final Product product;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ClayCard(
+      onTap: onTap,
+      width: 278,
+      padding: EdgeInsets.zero,
+      radius: AppRadius.xl,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (product.primaryImageUrl.isEmpty)
+            Container(
+              color: AppColors.surfaceSunken,
+              child: const Icon(
+                Icons.rice_bowl_outlined,
+                size: 44,
+                color: AppColors.primaryLight,
+              ),
+            )
+          else
+            CachedNetworkImage(
+              imageUrl: product.primaryImageUrl,
+              fit: BoxFit.cover,
+              errorWidget: (_, _, _) => Container(
+                color: AppColors.surfaceSunken,
+                child: const Icon(
+                  Icons.rice_bowl_outlined,
+                  size: 44,
+                  color: AppColors.primaryLight,
+                ),
+              ),
+              placeholder: (_, _) => Container(color: AppColors.surfaceSunken),
+            ),
+
+          // Dark only at the foot, where the text sits, so the rice itself
+          // stays as bright as it was photographed. It starts low and stays
+          // short of opaque: enough to carry white text, not enough to turn a
+          // good photo into a silhouette.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment(0, 0.15),
+                end: Alignment.bottomCenter,
+                colors: [Color(0x00101A14), Color(0xC2101A14)],
+              ),
+            ),
+          ),
+
+          Positioned(
+            top: 12,
+            left: 12,
+            child: ClayBadge(
+              label: product.variety,
+              color: AppColors.primaryDark,
+              compact: true,
+            ),
+          ),
+
+          Positioned(
+            left: 14,
+            right: 14,
+            bottom: 13,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  product.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Row(
+                  children: [
+                    Text(
+                      '₱${product.startingPrice.toStringAsFixed(0)}',
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                        letterSpacing: -0.4,
+                      ),
+                    ),
+                    const Text(
+                      ' /kg',
+                      style: TextStyle(fontSize: 11.5, color: Color(0xCCFFFFFF)),
+                    ),
+                    const Spacer(),
+                    if (product.averageRating > 0) ...[
+                      const Icon(
+                        Icons.star_rounded,
+                        size: 14,
+                        color: AppColors.accent,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        '${product.averageRating}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ] else if (product.soldCount > 0)
+                      Text(
+                        '${product.soldCount} sold',
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          color: Color(0xCCFFFFFF),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A round filter for one kind of rice, the way the wireframe shows
+/// categories. The icon differs per variety so the row is scannable by shape
+/// as well as by label.
+class _VarietyDisc extends StatelessWidget {
+  const _VarietyDisc({
+    required this.variety,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final RiceVariety variety;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static const _icons = {
+    '': Icons.grid_view_rounded,
+    'Jasmine': Icons.local_florist_rounded,
+    'Sinandomeng': Icons.rice_bowl_rounded,
+    'Brown Rice': Icons.eco_rounded,
+    'Black Rice': Icons.circle_rounded,
+    'Red Rice': Icons.spa_rounded,
+    'Glutinous (Malagkit)': Icons.water_drop_rounded,
+    'Other': Icons.more_horiz_rounded,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = _icons[variety.value] ?? Icons.rice_bowl_rounded;
+
+    return SizedBox(
+      width: 66,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          GestureDetector(
+            onTap: onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              height: 58,
+              width: 58,
+              decoration: BoxDecoration(
+                color: selected ? AppColors.primaryMedium : AppColors.surface,
+                shape: BoxShape.circle,
+                boxShadow: selected ? AppShadows.accent : AppShadows.subtle,
+              ),
+              child: Icon(
+                icon,
+                size: 24,
+                color: selected ? Colors.white : AppColors.primaryMedium,
+              ),
+            ),
+          ),
+          const SizedBox(height: 7),
+          Text(
+            variety.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? AppColors.primaryMedium : AppColors.textMuted,
+            ),
+          ),
+        ],
       ),
     );
   }
