@@ -29,7 +29,7 @@ class ApiConfig {
   /// The laptop's address on Wi-Fi. DHCP hands out a new one when the network
   /// changes, so when nothing else works, check this with `ipconfig` and look
   /// at the Wi-Fi adapter's IPv4 address.
-  static const String lanHost = '172.23.203.230';
+  static const String lanHost = '192.168.254.114';
 
   static String _localhost() => 'http://localhost:$port/api';
   static String _emulator() => 'http://10.0.2.2:$port/api';
