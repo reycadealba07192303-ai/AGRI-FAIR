@@ -51,7 +51,20 @@ flutter run
 Ang `localhost` sa cellphone ay ang cellphone mismo, hindi ang laptop mo. Kaya:
 
 - **Android emulator** — `http://10.0.2.2:8080`, ito na ang default
-- **Totoong cellphone** — ang LAN IP ng laptop, magkaparehong Wi-Fi:
+- **Totoong cellphone, USB** — pinakamaaasahan, at hindi alintana ang network:
+
+```bash
+adb reverse tcp:8080 tcp:8080
+flutter run --dart-define=USE_ADB=true
+```
+
+  Idinadaan nito sa cable ang sariling `localhost:8080` ng cellphone papunta sa
+  laptop. Gumagana kahit magkaibang network kayo — mobile data, ibang Wi-Fi, o
+  wala man. Kailangan lang ay nakabukas ang USB debugging at nakasaksak ang
+  cable. **Uulitin ang `adb reverse` sa tuwing tatanggalin at isasaksak ulit
+  ang cable**, o kapag nag-restart ang adb.
+
+- **Totoong cellphone, Wi-Fi** — magkaparehong network kayo:
 
 ```bash
 flutter run --dart-define=USE_LAN=true

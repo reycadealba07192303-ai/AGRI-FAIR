@@ -12,6 +12,15 @@ class ApiConfig {
   ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.14:8080/api
   static const String _override = String.fromEnvironment('API_BASE_URL');
 
+  /// Reach the laptop through the USB cable instead of the network:
+  ///   adb reverse tcp:8080 tcp:8080
+  ///   flutter run --dart-define=USE_ADB=true
+  ///
+  /// adb forwards the phone's own localhost:8080 down the cable, so this works
+  /// no matter which network the phone is on - mobile data, a different Wi-Fi,
+  /// or none at all. It needs USB debugging on and the cable plugged in.
+  static const bool _useAdb = bool.fromEnvironment('USE_ADB');
+
   /// Run against [lanHost] instead of the emulator address:
   ///   flutter run --dart-define=USE_LAN=true
   ///
@@ -32,6 +41,10 @@ class ApiConfig {
 
   static String get baseUrl {
     if (_override.isNotEmpty) return _override;
+
+    // Over the cable the phone's own localhost is the laptop's, so no address
+    // is needed and no network has to match.
+    if (_useAdb) return 'http://localhost:$port/api';
 
     // A real device has to dial the laptop by its address on the network.
     if (_useLan) return 'http://$lanHost:$port/api';
