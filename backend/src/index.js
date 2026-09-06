@@ -4,6 +4,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import express from 'express';
 import http from 'http';
+import { notFoundHandler, errorHandler } from './middleware/errorMiddleware.js';
 import routes from './routes/index.js';
 import mongoose from 'mongoose';
 import cookieParser from 'cookie-parser';
@@ -60,6 +61,11 @@ app.use('/uploads/media', express.static(path.join(__dirname, 'uploads/media')))
 // ====================== ROUTES ======================
 app.use('/api', routes);
 app.use('/api/chat', chatRoutes);
+
+// ====================== ERRORS ======================
+// Must sit after every route: Express matches these only once nothing else has.
+app.use('/api', notFoundHandler);
+app.use(errorHandler);
 
 // ====================== MONGO DB ======================
 mongoose.connect(process.env.MONGODB_URI)

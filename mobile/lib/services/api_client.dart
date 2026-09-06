@@ -144,6 +144,10 @@ class ApiClient {
   Future<dynamic> _send(Future<http.Response> Function() request) async {
     late http.Response response;
 
+    // Whether this call carried a session decides what a 401 means, so it is
+    // read before the request rather than guessed after it.
+    final hadToken = await hasToken;
+
     try {
       response = await request().timeout(_timeout);
     } on SocketException {
@@ -155,15 +159,18 @@ class ApiClient {
       throw ApiException('The server took too long to answer. Try again.');
     }
 
-    return _parse(response);
+    return _parse(response, hadToken: hadToken);
   }
 
-  dynamic _parse(http.Response response) {
+  dynamic _parse(http.Response response, {required bool hadToken}) {
     final status = response.statusCode;
 
-    // A 401 means the stored token is gone or expired. Dropping it here keeps
-    // the app from retrying with a credential the server has already refused.
-    if (status == 401) {
+    // A 401 means two different things. With a token, the session is gone and
+    // the app should return to sign-in. Without one, this *is* the sign-in
+    // attempt and the caller handles it - firing the global handler here tore
+    // down the screen before it could show why the login failed, which is what
+    // swallowed the "verify your email" step.
+    if (status == 401 && hadToken) {
       unawaited(clearToken());
       onUnauthorized?.call();
     }
