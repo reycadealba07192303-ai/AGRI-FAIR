@@ -3,8 +3,7 @@ import '../models/notification_model.dart';
 import '../models/user_model.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
-import 'order_detail_screen.dart';
-import 'order_history_screen.dart';
+import 'orders_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -194,18 +193,20 @@ class _NotificationCard extends StatelessWidget {
             (o) => o.orderNumber == notification.referenceId,
           );
           if (matches.isNotEmpty) {
+            // Notifications still read from the local model, whose orders are
+            // a different shape from the server's. Rather than open a detail
+            // screen with a stale copy, this lands on the real list; it moves
+            // to /notifications with the rest of Phase 7.
             Navigator.push(
               context,
-              MaterialPageRoute(
-                builder: (_) => OrderDetailScreen(order: matches.first),
-              ),
+              MaterialPageRoute(builder: (_) => const OrdersScreen()),
             );
             return;
           }
         }
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => const OrderHistoryScreen()),
+          MaterialPageRoute(builder: (_) => const OrdersScreen()),
         );
         break;
       case NotificationType.newMessage:

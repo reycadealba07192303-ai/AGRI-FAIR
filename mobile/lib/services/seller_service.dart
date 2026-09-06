@@ -9,6 +9,18 @@ class SellerService {
 
   final _api = ApiClient.instance;
 
+  /// The shop directory. Only sellers with something listed come back.
+  Future<List<ShopSummary>> shops() async {
+    final body = await _api.get('/sellers');
+    if (body is! List) return const [];
+
+    return body
+        .whereType<Map<String, dynamic>>()
+        .map(ShopSummary.fromJson)
+        .where((shop) => shop.id > 0)
+        .toList();
+  }
+
   Future<SellerProfile> profile(int sellerId) async {
     final body = await _api.get('/sellers/$sellerId');
     return SellerProfile.fromJson(body as Map<String, dynamic>);

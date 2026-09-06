@@ -8,6 +8,19 @@ function fail(res, err, fallback) {
   });
 }
 
+export const listShops = async (req, res) => {
+  try {
+    const shops = await sellerService.listShops();
+    return res.json({
+      success: true,
+      message: 'Shops retrieved successfully',
+      data: shops,
+    });
+  } catch (err) {
+    return fail(res, err, 'Could not load the shops');
+  }
+};
+
 export const getSellerProfile = async (req, res) => {
   try {
     const profile = await sellerService.getPublicProfile(Number(req.params.id));

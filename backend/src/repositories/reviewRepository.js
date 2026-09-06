@@ -38,6 +38,23 @@ export const getRatingMapForProducts = async (productIds) => {
   );
 };
 
+/** The seller-side twin of getRatingMapForProducts, for the shop directory. */
+export const getRatingMapForSellers = async (sellerIds) => {
+  if (!sellerIds?.length) return new Map();
+
+  const rows = await Review.aggregate([
+    { $match: { sellerId: { $in: sellerIds }, hidden: false } },
+    { $group: { _id: '$sellerId', average: { $avg: '$rating' }, count: { $sum: 1 } } },
+  ]);
+
+  return new Map(
+    rows.map((row) => [
+      row._id,
+      { averageRating: Math.round(row.average * 10) / 10, reviewCount: row.count },
+    ])
+  );
+};
+
 export const getRatingSummary = async (match) => {
   const [totals] = await Review.aggregate([
     { $match: { ...match, hidden: false } },

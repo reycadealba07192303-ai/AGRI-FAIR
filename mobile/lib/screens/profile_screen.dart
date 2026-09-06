@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../models/cart.dart';
+import '../models/order.dart';
 import '../theme/app_theme.dart';
 import 'sign_in_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
-import 'order_history_screen.dart';
-import 'ongoing_orders_screen.dart';
+
+import 'orders_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -72,7 +73,7 @@ class ProfileScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const OngoingOrdersScreen()),
+                        builder: (_) => const OrdersScreen(initialStage: OrderStage.toShip)),
                   ),
                 ),
                 _MenuItem(
@@ -85,7 +86,7 @@ class ProfileScreen extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                        builder: (_) => const OrderHistoryScreen()),
+                        builder: (_) => const OrdersScreen()),
                   ),
                 ),
               ]),

@@ -1,0 +1,10 @@
+# Some tests need a throwaway account planted in the database first, and they
+# share one rate limiter, so running them alongside everything else trips it.
+# They are excluded from a plain `flutter test` and run on their own:
+#
+#   flutter test --tags fixture -j 1
+#
+# Each of those files says at the top what to create before running it.
+tags:
+  fixture:
+    skip: "needs a seeded account - run with: flutter test --tags fixture -j 1"

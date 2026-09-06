@@ -1,0 +1,171 @@
+import '../services/api_config.dart';
+
+/// Where an order sits, in the words a buyer uses rather than the server's.
+///
+/// The backend tracks seven statuses; a buyer thinks in fewer stages, so
+/// several map onto one tab. `returned` collects cancellations too - whoever
+/// called it off, the buyer is looking for the same thing: the order that did
+/// not happen.
+enum OrderStage {
+  all('All'),
+  toPay('To Pay'),
+  toShip('To Ship'),
+  toReceive('To Receive'),
+  toReview('To Review'),
+  returned('Return');
+
+  const OrderStage(this.label);
+
+  final String label;
+
+  /// Which server statuses belong under this tab. Empty means every one.
+  Set<String> get statuses {
+    switch (this) {
+      case OrderStage.all:
+        return const {};
+      case OrderStage.toPay:
+        // Nothing is committed until a seller confirms, so this is where an
+        // order waits for payment to be arranged.
+        return const {'pending'};
+      case OrderStage.toShip:
+        return const {'confirmed', 'processing'};
+      case OrderStage.toReceive:
+        return const {'shipped'};
+      case OrderStage.toReview:
+        return const {'delivered', 'completed'};
+      case OrderStage.returned:
+        return const {'cancelled'};
+    }
+  }
+
+  bool matches(String status) => statuses.isEmpty || statuses.contains(status);
+}
+
+class OrderItem {
+  const OrderItem({
+    required this.productId,
+    required this.productName,
+    required this.quantity,
+    required this.unitPrice,
+    required this.subtotal,
+    required this.status,
+    this.image = '',
+  });
+
+  final String productId;
+  final String productName;
+  final int quantity;
+  final double unitPrice;
+  final double subtotal;
+  final String status;
+  final String image;
+
+  String get imageUrl => ApiConfig.mediaUrl(image);
+
+  factory OrderItem.fromJson(Map<String, dynamic> json) {
+    return OrderItem(
+      productId: (json['productId'] ?? '').toString(),
+      productName: (json['productName'] ?? '').toString(),
+      quantity: (json['quantity'] as num?)?.toInt() ?? 0,
+      unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0,
+      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      status: (json['status'] ?? 'pending').toString(),
+      image: (json['image'] ?? json['productImage'] ?? '').toString(),
+    );
+  }
+}
+
+/// One checkout. A basket split across sellers becomes several rows on the
+/// server but stays one order to the buyer, held together by `groupId`.
+class OrderGroup {
+  const OrderGroup({
+    required this.groupId,
+    required this.orderNumber,
+    required this.status,
+    required this.items,
+    required this.total,
+    required this.canCancel,
+    this.deliveryFee = 0,
+    this.paymentMethod = '',
+    this.deliveryAddress = '',
+    this.orderDate,
+  });
+
+  final String groupId;
+  final String orderNumber;
+
+  /// The whole order's status. Where rows disagree, the earliest stage wins -
+  /// an order is only shipped once every part of it is.
+  final String status;
+  final List<OrderItem> items;
+  final double total;
+  final bool canCancel;
+  final double deliveryFee;
+  final String paymentMethod;
+  final String deliveryAddress;
+  final DateTime? orderDate;
+
+  int get itemCount => items.fold(0, (sum, i) => sum + i.quantity);
+
+  String get statusLabel {
+    switch (status) {
+      case 'pending':
+        return 'Waiting for the seller';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'processing':
+        return 'Being prepared';
+      case 'shipped':
+        return 'On the way';
+      case 'delivered':
+        return 'Delivered';
+      case 'completed':
+        return 'Completed';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status;
+    }
+  }
+
+  factory OrderGroup.fromJson(Map<String, dynamic> json) {
+    final items = (json['items'] as List?)
+            ?.whereType<Map<String, dynamic>>()
+            .map(OrderItem.fromJson)
+            .toList() ??
+        const <OrderItem>[];
+
+    return OrderGroup(
+      groupId: (json['groupId'] ?? '').toString(),
+      orderNumber: (json['orderNumber'] ?? '').toString(),
+      status: (json['status'] ?? _earliestStage(items)).toString(),
+      items: items,
+      total: (json['total'] as num?)?.toDouble() ?? 0,
+      canCancel: json['canCancel'] == true,
+      deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
+      paymentMethod: (json['paymentMethod'] ?? '').toString(),
+      deliveryAddress: (json['deliveryAddress'] ?? '').toString(),
+      orderDate: DateTime.tryParse((json['orderDate'] ?? '').toString()),
+    );
+  }
+
+  /// Falls back to the least advanced row when the server sends no group
+  /// status: an order half-shipped is not a shipped order.
+  static String _earliestStage(List<OrderItem> items) {
+    if (items.isEmpty) return 'pending';
+
+    const order = [
+      'cancelled',
+      'pending',
+      'confirmed',
+      'processing',
+      'shipped',
+      'delivered',
+      'completed',
+    ];
+
+    return items
+        .map((i) => i.status)
+        .reduce((a, b) => order.indexOf(a) <= order.indexOf(b) ? a : b);
+  }
+}

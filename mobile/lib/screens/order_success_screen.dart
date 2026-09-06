@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import '../models/order.dart';
 import '../theme/app_theme.dart';
-import 'ongoing_orders_screen.dart';
+import 'orders_screen.dart';
 
 class OrderSuccessScreen extends StatefulWidget {
   final String orderNumber;
@@ -279,7 +280,7 @@ class _OrderSuccessScreenState extends State<OrderSuccessScreen>
                             final nav = Navigator.of(context);
                             nav.popUntil((route) => route.isFirst);
                             nav.push(MaterialPageRoute(
-                              builder: (_) => const OngoingOrdersScreen(),
+                              builder: (_) => const OrdersScreen(initialStage: OrderStage.toPay),
                             ));
                           },
                           icon: const Icon(

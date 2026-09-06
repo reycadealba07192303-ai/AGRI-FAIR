@@ -1,6 +1,7 @@
 import Product from '../models/Product.js';
+import User from '../models/User.js';
 import { findUserByUserIdSafe } from '../repositories/userRepository.js';
-import { getRatingSummary } from '../repositories/reviewRepository.js';
+import { getRatingSummary, getRatingMapForSellers } from '../repositories/reviewRepository.js';
 
 /**
  * A seller's public face, for a buyer deciding whether to trust them.
@@ -68,6 +69,65 @@ export const sellerService = {
       productCount: products.length,
       totalSold: products.reduce((sum, p) => sum + (p.soldCount || 0), 0),
     });
+  },
+
+  /**
+   * The shop directory. Only sellers with something to sell appear: a buyer
+   * browsing shops has no use for an empty one, and an approved account with
+   * no listings is not yet a shop.
+   */
+  async listShops() {
+    // One grouped query rather than a lookup per seller - a directory of
+    // twenty shops would otherwise be twenty-one round trips.
+    const counts = await Product.aggregate([
+      { $match: { status: 'active' } },
+      {
+        $group: {
+          _id: '$createdBy',
+          productCount: { $sum: 1 },
+          totalSold: { $sum: { $ifNull: ['$soldCount', 0] } },
+          varieties: { $addToSet: '$variety' },
+          fromPrice: { $min: '$price' },
+        },
+      },
+      { $sort: { totalSold: -1 } },
+    ]);
+
+    if (!counts.length) return [];
+
+    const sellerIds = counts.map((row) => row._id);
+    const [sellers, ratings] = await Promise.all([
+      User.find({ userId: { $in: sellerIds }, role: 'seller', status: 'active' }),
+      getRatingMapForSellers(sellerIds),
+    ]);
+
+    const byId = new Map(sellers.map((user) => [user.userId, user]));
+
+    return counts
+      .filter((row) => byId.has(row._id))
+      .map((row) => {
+        const user = byId.get(row._id);
+        const documents = user.documents || [];
+        const rating = ratings.get(row._id) || { averageRating: 0, reviewCount: 0 };
+
+        return {
+          id: user.userId,
+          name: user.name,
+          businessName: user.sellerProfile?.businessName || '',
+          avatarUrl: user.avatarUrl || '',
+          sellerType: user.sellerType || '',
+          farmLocation: user.sellerProfile?.farmLocation || '',
+          isVerified: documents.some((doc) => doc.status === 'verified'),
+          productCount: row.productCount,
+          totalSold: row.totalSold,
+          // What they actually stock, so a shop card can say so without the
+          // app fetching every listing to find out.
+          varieties: row.varieties.filter(Boolean).sort(),
+          fromPrice: row.fromPrice,
+          averageRating: rating.averageRating,
+          reviewCount: rating.reviewCount,
+        };
+      });
   },
 
   /** Only active listings - a buyer browsing a shop should not meet hidden ones. */

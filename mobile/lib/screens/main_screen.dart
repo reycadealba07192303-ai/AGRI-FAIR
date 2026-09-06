@@ -1,228 +1,186 @@
 import 'package:flutter/material.dart';
-import '../models/chat_model.dart';
-import '../models/user_model.dart';
-import '../models/notification_model.dart';
-import '../theme/app_theme.dart';
-import 'home_screen.dart';
-import 'chat_screen.dart';
-import 'ongoing_orders_screen.dart';
-import 'profile_screen.dart';
 
+import '../models/chat_model.dart';
+import '../theme/app_theme.dart';
+import 'chat_screen.dart';
+import 'home_screen.dart';
+import 'profile_screen.dart';
+import 'shop_screen.dart';
+
+/// Four places, each answering a different question: what rice is there, who
+/// sells it, who am I talking to, and what have I bought.
+///
+/// Orders used to sit here as a fifth tab. They belong under Profile - a
+/// buyer looks for their orders where their account is, and a tab bar with
+/// five entries makes every one of them harder to hit.
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   State<MainScreen> createState() => _MainScreenState();
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _tab = 0;
-  bool _listenerRegistered = false;
+  late int _tab = widget.initialTab;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_listenerRegistered) {
-      _listenerRegistered = true;
-      final userModel = UserModel.of(context);
-      final notifModel = NotificationModel.of(context);
-      userModel.listenToStatusChanges((orderNumber, newStatus) {
-        _onOrderStatusChanged(notifModel, orderNumber, newStatus);
-      });
-    }
-  }
-
-  void _onOrderStatusChanged(
-    NotificationModel nm,
-    String orderNumber,
-    String newStatus,
-  ) {
-    String title;
-    String body;
-    NotificationType type;
-
-    switch (newStatus) {
-      case 'Confirmed':
-        title = 'Order Confirmed!';
-        body =
-            'Your order $orderNumber has been confirmed by our team and is being prepared.';
-        type = NotificationType.orderConfirmed;
-      case 'Preparing':
-        title = 'Order Being Prepared';
-        body =
-            'Good news! Your order $orderNumber is being carefully packed and prepared for delivery.';
-        type = NotificationType.orderPacked;
-      case 'Out for Delivery':
-        title = 'Out for Delivery!';
-        body =
-            'Your order $orderNumber is on its way! The courier is heading to your location.';
-        type = NotificationType.outForDelivery;
-      case 'Delivered':
-        title = 'Order Delivered!';
-        body =
-            'Your order $orderNumber has arrived. We hope you enjoy your premium rice!';
-        type = NotificationType.delivered;
-      case 'Cancelled':
-        title = 'Order Cancelled';
-        body =
-            'Your order $orderNumber has been cancelled. Please contact support if you need assistance.';
-        type = NotificationType.orderCancelled;
-      default:
-        return;
-    }
-
-    nm.add(AppNotification(
-      id: 'status_${orderNumber}_$newStatus',
-      title: title,
-      body: body,
-      type: type,
-      timestamp: DateTime.now(),
-      referenceId: orderNumber,
-    ));
-  }
-
-  void _onTabTap(int i) {
-    if (i == 1) ChatModel.of(context).markAllRead();
-    setState(() => _tab = i);
-  }
+  static const _tabs = [
+    _TabSpec(Icons.home_rounded, Icons.home_outlined, 'Home'),
+    _TabSpec(Icons.storefront_rounded, Icons.storefront_outlined, 'Shop'),
+    _TabSpec(Icons.forum_rounded, Icons.forum_outlined, 'Messages'),
+    _TabSpec(Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    final unreadChat = ChatModel.of(context).unreadCount;
-    final user = UserModel.of(context);
-    final activeOrders = user.orders
-        .where((o) => o.status != 'Delivered' && o.status != 'Cancelled')
-        .length;
-
     return Scaffold(
+      backgroundColor: AppColors.background,
+      // Kept alive so scroll position and loaded data survive tab switches -
+      // rebuilding the catalog every time Home is tapped refetches for nothing.
       body: IndexedStack(
         index: _tab,
         children: const [
           HomeScreen(),
+          ShopScreen(),
           ChatScreen(),
-          OngoingOrdersScreen(),
           ProfileScreen(),
         ],
       ),
-      bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+      bottomNavigationBar: _navBar(),
+    );
+  }
+
+  Widget _navBar() {
+    return Container(
+      decoration: const BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x1F667A6C),
+            offset: Offset(0, -6),
+            blurRadius: 18,
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+          child: Row(
+            children: [
+              for (var i = 0; i < _tabs.length; i++)
+                Expanded(
+                  child: _NavItem(
+                    spec: _tabs[i],
+                    selected: _tab == i,
+                    badge: i == 2 ? _unreadCount(context) : 0,
+                    onTap: () => setState(() => _tab = i),
+                  ),
+                ),
+            ],
+          ),
         ),
-        child: BottomNavigationBar(
-          currentIndex: _tab,
-          onTap: _onTabTap,
-          backgroundColor: AppColors.surface,
-          selectedItemColor: AppColors.primaryDark,
-          unselectedItemColor: AppColors.textMuted,
-          selectedLabelStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 0.1,
-          ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-          elevation: 0,
-          type: BottomNavigationBarType.fixed,
-          items: [
-            const BottomNavigationBarItem(
-              icon: Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.home_outlined, size: 24),
+      ),
+    );
+  }
+
+  int _unreadCount(BuildContext context) {
+    try {
+      return ChatModel.of(context).unreadCount;
+    } catch (_) {
+      // The chat model is still local. A missing count must not take the whole
+      // navigation bar down with it.
+      return 0;
+    }
+  }
+}
+
+class _TabSpec {
+  const _TabSpec(this.active, this.inactive, this.label);
+
+  final IconData active;
+  final IconData inactive;
+  final String label;
+}
+
+class _NavItem extends StatelessWidget {
+  const _NavItem({
+    required this.spec,
+    required this.selected,
+    required this.onTap,
+    this.badge = 0,
+  });
+
+  final _TabSpec spec;
+  final bool selected;
+  final VoidCallback onTap;
+  final int badge;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.primaryMedium : AppColors.textMuted;
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The selected tab sits on a raised pill, so which one is active
+            // reads at a glance rather than from colour alone.
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 190),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+              decoration: BoxDecoration(
+                color: selected ? AppColors.surfaceSunken : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
-              activeIcon: Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.home_rounded, size: 24),
-              ),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.chat_bubble_outline_rounded, size: 24),
-                    if (unreadChat > 0)
-                      Positioned(
-                        top: -4,
-                        right: -6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: const BoxDecoration(
-                            color: AppColors.accent,
-                            borderRadius:
-                                BorderRadius.all(Radius.circular(8)),
-                          ),
-                          child: Text(
-                            unreadChat > 9 ? '9+' : '$unreadChat',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(selected ? spec.active : spec.inactive, size: 23, color: color),
+                  if (badge > 0)
+                    Positioned(
+                      top: -4,
+                      right: -7,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        constraints: const BoxConstraints(minWidth: 17),
+                        decoration: BoxDecoration(
+                          color: AppColors.error,
+                          borderRadius: BorderRadius.circular(AppRadius.pill),
+                          border: Border.all(color: AppColors.surface, width: 1.5),
+                        ),
+                        child: Text(
+                          badge > 99 ? '99+' : '$badge',
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
-              activeIcon: const Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.chat_bubble_rounded, size: 24),
-              ),
-              label: 'Message',
             ),
-            BottomNavigationBarItem(
-              icon: Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    const Icon(Icons.receipt_long_outlined, size: 24),
-                    if (activeOrders > 0)
-                      Positioned(
-                        top: -4,
-                        right: -6,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryMedium,
-                            borderRadius:
-                                const BorderRadius.all(Radius.circular(8)),
-                          ),
-                          child: Text(
-                            activeOrders > 9 ? '9+' : '$activeOrders',
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+            const SizedBox(height: 4),
+            Text(
+              spec.label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: color,
               ),
-              activeIcon: const Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.receipt_long_rounded, size: 24),
-              ),
-              label: 'Orders',
-            ),
-            const BottomNavigationBarItem(
-              icon: Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.person_outline_rounded, size: 24),
-              ),
-              activeIcon: Padding(
-                padding: EdgeInsets.only(bottom: 2),
-                child: Icon(Icons.person_rounded, size: 24),
-              ),
-              label: 'Profile',
             ),
           ],
         ),
