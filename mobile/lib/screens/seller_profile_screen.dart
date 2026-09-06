@@ -172,52 +172,110 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
     );
   }
 
+  static const double _bannerHeight = 172;
+  static const double _avatarSize = 76;
+
+  /// Banner and avatar in one box.
+  ///
+  /// The avatar has to overlap the banner's edge, and a sliver clips anything
+  /// that leaves its own bounds - so both live in one Stack tall enough to
+  /// hold the overlap, rather than the avatar being nudged upward out of the
+  /// sliver below and having its top cut off.
   Widget _hero() {
     final profile = _profile;
-    final farmPhoto =
-        profile != null && profile.farmPhotoUrls.isNotEmpty
-            ? profile.farmPhotoUrls.first
-            : '';
+    final farmPhoto = profile != null && profile.farmPhotoUrls.isNotEmpty
+        ? profile.farmPhotoUrls.first
+        : '';
 
     return SizedBox(
-      height: 172,
-      width: double.infinity,
+      height: _bannerHeight + _avatarSize / 2,
       child: Stack(
-        fit: StackFit.expand,
         children: [
-          if (farmPhoto.isEmpty)
-            // Sellers rarely upload a farm photo, and a blank green band reads
-            // as a loading bug. A field stands in for one.
-            Image.asset(
-              'assets/banners/ricefarm2.jpg',
-              fit: BoxFit.cover,
-              errorBuilder: (_, _, _) =>
-                  Container(color: AppColors.primaryDark),
-            )
-          else
-            CachedNetworkImage(
-              imageUrl: farmPhoto,
-              fit: BoxFit.cover,
-              errorWidget: (_, _, _) => Image.asset(
-                'assets/banners/ricefarm2.jpg',
-                fit: BoxFit.cover,
-                errorBuilder: (_, _, _) =>
-                    Container(color: AppColors.primaryDark),
-              ),
-              placeholder: (_, _) => Container(color: AppColors.surfaceSunken),
-            ),
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0x66101A14), Color(0x1A101A14)],
-              ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: _bannerHeight,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (farmPhoto.isEmpty)
+                  // Sellers rarely upload a farm photo, and a blank green band
+                  // reads as a loading bug. A field stands in for one.
+                  Image.asset(
+                    'assets/banners/ricefarm2.jpg',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, _, _) =>
+                        Container(color: AppColors.primaryDark),
+                  )
+                else
+                  CachedNetworkImage(
+                    imageUrl: farmPhoto,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => Image.asset(
+                      'assets/banners/ricefarm2.jpg',
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, _, _) =>
+                          Container(color: AppColors.primaryDark),
+                    ),
+                    placeholder: (_, _) =>
+                        Container(color: AppColors.surfaceSunken),
+                  ),
+                const DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Color(0x66101A14), Color(0x14101A14)],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
+
+          Positioned(
+            top: _bannerHeight - _avatarSize / 2,
+            left: 0,
+            right: 0,
+            child: Center(child: _avatar()),
+          ),
+
           _floatingBar(),
         ],
       ),
+    );
+  }
+
+  Widget _avatar() {
+    final profile = _profile;
+
+    return Container(
+      height: _avatarSize,
+      width: _avatarSize,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        shape: BoxShape.circle,
+        // A ring in the page colour separates the avatar from the photograph
+        // behind it, whatever that photograph happens to be.
+        border: Border.all(color: AppColors.background, width: 4),
+        boxShadow: AppShadows.raised,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: _loading
+          ? const ClaySkeleton(
+              height: _avatarSize,
+              width: _avatarSize,
+              radius: 99,
+            )
+          : profile!.avatarUrl.isEmpty
+              ? _avatarInitial(profile.displayName)
+              : CachedNetworkImage(
+                  imageUrl: profile.avatarImageUrl,
+                  fit: BoxFit.cover,
+                  errorWidget: (_, _, _) => _avatarInitial(profile.displayName),
+                  placeholder: (_, _) => _avatarInitial(profile.displayName),
+                ),
     );
   }
 
@@ -241,53 +299,24 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   Widget _identity() {
     final profile = _profile;
 
-    return Transform.translate(
-      // The avatar straddles the banner edge, which is what ties the two
-      // together instead of stacking them as separate blocks.
-      offset: const Offset(0, -34),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
       child: Column(
         children: [
-          Container(
-            height: 74,
-            width: 74,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.background, width: 4),
-              boxShadow: AppShadows.raised,
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: _loading
-                ? const ClaySkeleton(height: 74, width: 74, radius: 99)
-                : profile!.avatarUrl.isEmpty
-                    ? _avatarInitial(profile.displayName)
-                    : CachedNetworkImage(
-                        imageUrl: profile.avatarImageUrl,
-                        fit: BoxFit.cover,
-                        errorWidget: (_, _, _) =>
-                            _avatarInitial(profile.displayName),
-                        placeholder: (_, _) =>
-                            _avatarInitial(profile.displayName),
-                      ),
-          ),
-          const SizedBox(height: 9),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Flexible(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    profile?.displayName ?? widget.initialName,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                      color: AppColors.textDark,
-                    ),
+                child: Text(
+                  profile?.displayName ?? widget.initialName,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                    color: AppColors.textDark,
                   ),
                 ),
               ),
@@ -302,7 +331,7 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
             ],
           ),
           if (profile != null && profile.farmLocation.isNotEmpty) ...[
-            const SizedBox(height: 3),
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -312,11 +341,15 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                   color: AppColors.textMuted,
                 ),
                 const SizedBox(width: 3),
-                Text(
-                  profile.farmLocation,
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textMuted,
+                Flexible(
+                  child: Text(
+                    profile.farmLocation,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ),
               ],
@@ -330,10 +363,8 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   Widget _stats() {
     final profile = _profile;
 
-    return Transform.translate(
-      offset: const Offset(0, -22),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: ClayCard(
           padding: const EdgeInsets.symmetric(vertical: 14),
           child: Row(
@@ -366,15 +397,12 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
   Widget _actions() {
-    return Transform.translate(
-      offset: const Offset(0, -8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
         child: Row(
           children: [
             Expanded(
@@ -397,7 +425,6 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
             ),
           ],
         ),
-      ),
     );
   }
 
