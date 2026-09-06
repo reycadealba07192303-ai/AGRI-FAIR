@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/address.dart';
+import '../models/ph_provinces.dart';
 import '../services/address_service.dart';
 import '../services/api_client.dart';
 import '../theme/app_theme.dart';
@@ -405,9 +406,9 @@ class _AddressFormState extends State<_AddressForm> {
   late final _line = TextEditingController(text: widget.existing?.line);
   late final _barangay = TextEditingController(text: widget.existing?.barangay);
   late final _city = TextEditingController(text: widget.existing?.city);
-  late final _province = TextEditingController(text: widget.existing?.province);
   late final _notes = TextEditingController(text: widget.existing?.notes);
 
+  late String _province = widget.existing?.province ?? '';
   late bool _isDefault = widget.existing?.isDefault ?? false;
 
   @override
@@ -419,7 +420,6 @@ class _AddressFormState extends State<_AddressForm> {
       _line,
       _barangay,
       _city,
-      _province,
       _notes,
     ]) {
       c.dispose();
@@ -439,7 +439,7 @@ class _AddressFormState extends State<_AddressForm> {
         line: _line.text.trim(),
         barangay: _barangay.text.trim(),
         city: _city.text.trim(),
-        province: _province.text.trim(),
+        province: _province,
         notes: _notes.text.trim(),
         isDefault: _isDefault,
       ),
@@ -484,13 +484,13 @@ class _AddressFormState extends State<_AddressForm> {
                 ),
               ),
               const SizedBox(height: 20),
-              _field(_label, 'Label', hint: 'Home, Work'),
+              _field(_label, 'Label', hint: 'Home, Work, Bahay ni Nanay'),
               const SizedBox(height: 12),
               _field(
                 _fullName,
                 'Full name',
                 required: true,
-                message: 'Who is receiving this?',
+                message: 'Who will receive this?',
               ),
               const SizedBox(height: 12),
               _field(
@@ -498,31 +498,36 @@ class _AddressFormState extends State<_AddressForm> {
                 'Contact number',
                 required: true,
                 message: 'The rider needs a number to call.',
+                hint: '09XX XXX XXXX',
                 keyboard: TextInputType.phone,
               ),
               const SizedBox(height: 12),
-              _field(
-                _line,
-                'House number and street',
-                required: true,
-                message: 'Add the street or purok.',
+              _ProvinceField(
+                value: _province,
+                onChanged: (value) => setState(() => _province = value),
               ),
-              const SizedBox(height: 12),
-              _field(_barangay, 'Barangay'),
               const SizedBox(height: 12),
               _field(
                 _city,
                 'City or municipality',
                 required: true,
-                message: 'Add the city or municipality.',
+                message: 'Which city or town?',
               ),
               const SizedBox(height: 12),
-              _field(_province, 'Province'),
+              _field(_barangay, 'Barangay', hint: 'Optional'),
+              const SizedBox(height: 12),
+              _field(
+                _line,
+                'House number and street',
+                required: true,
+                message: 'Which street or purok?',
+                hint: 'Blk 48 Lot 71, Rizal St.',
+              ),
               const SizedBox(height: 12),
               _field(
                 _notes,
-                'Landmark or note',
-                hint: 'Green gate beside the sari-sari store',
+                'Landmark',
+                hint: 'Optional — green gate beside the sari-sari store',
                 lines: 2,
               ),
               const SizedBox(height: 16),
@@ -574,6 +579,171 @@ class _AddressFormState extends State<_AddressForm> {
       validator: required
           ? (v) => (v?.trim().isEmpty ?? true) ? message : null
           : null,
+    );
+  }
+}
+
+/// Province as a choice rather than typed text.
+///
+/// A typed province comes back as "Nueva Ecjia" or "N. Ecija" often enough to
+/// matter when a rider reads it. Eighty-three entries is too many to scroll,
+/// so the sheet opens with a search box.
+class _ProvinceField extends StatelessWidget {
+  const _ProvinceField({required this.value, required this.onChanged});
+
+  final String value;
+  final ValueChanged<String> onChanged;
+
+  Future<void> _pick(BuildContext context) async {
+    final chosen = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.xl)),
+      ),
+      builder: (context) => const _ProvinceSheet(),
+    );
+
+    if (chosen != null) onChanged(chosen);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final empty = value.isEmpty;
+
+    return GestureDetector(
+      onTap: () => _pick(context),
+      behavior: HitTestBehavior.opaque,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Province',
+          suffixIcon: Icon(
+            Icons.expand_more_rounded,
+            color: AppColors.textMuted,
+            size: 22,
+          ),
+        ),
+        // Keeps the label floating even when nothing is picked, so the field
+        // does not sit there looking like an empty box with a hint.
+        isEmpty: false,
+        child: Text(
+          empty ? 'Choose a province' : value,
+          style: TextStyle(
+            fontSize: 15,
+            color: empty ? AppColors.textMuted : AppColors.textDark,
+            fontWeight: empty ? FontWeight.w400 : FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProvinceSheet extends StatefulWidget {
+  const _ProvinceSheet();
+
+  @override
+  State<_ProvinceSheet> createState() => _ProvinceSheetState();
+}
+
+class _ProvinceSheetState extends State<_ProvinceSheet> {
+  final _search = TextEditingController();
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matches = PhProvinces.search(_search.text);
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      child: DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.8,
+        maxChildSize: 0.92,
+        builder: (context, controller) => Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(
+                color: AppColors.surfaceSunken,
+                borderRadius: BorderRadius.circular(AppRadius.pill),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Province',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.4,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: _search,
+                    autofocus: true,
+                    onChanged: (_) => setState(() {}),
+                    decoration: const InputDecoration(
+                      hintText: 'Search',
+                      prefixIcon: Icon(
+                        Icons.search_rounded,
+                        color: AppColors.textMuted,
+                        size: 21,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: matches.isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
+                        child: Text(
+                          'No province matched that.',
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: controller,
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
+                      itemCount: matches.length,
+                      itemBuilder: (context, i) => ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          matches[i],
+                          style: const TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                        onTap: () => Navigator.of(context).pop(matches[i]),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
