@@ -28,7 +28,7 @@ class ApiConfig {
   /// the laptop. It comes from DHCP, so it can change after a reconnect - when
   /// the app suddenly cannot reach the server, check this first with
   /// `ipconfig` and look at the Wi-Fi adapter's IPv4 address.
-  static const String lanHost = '192.168.254.114';
+  static const String lanHost = '172.23.203.230';
 
   static String get baseUrl {
     if (_override.isNotEmpty) return _override;

@@ -17,7 +17,11 @@
         <domain includeSubdomains="false">localhost</domain>
         <domain includeSubdomains="false">127.0.0.1</domain>
 
-        <!-- This laptop on Wi-Fi, for running on a real phone -->
+        <!-- This laptop on Wi-Fi, for running on a real phone.
+             DHCP hands out a new one when the network changes; older
+             addresses are left listed so a reconnect to a previous network
+             keeps working. -->
+        <domain includeSubdomains="false">172.23.203.230</domain>
         <domain includeSubdomains="false">192.168.254.114</domain>
     </domain-config>
 </network-security-config>
