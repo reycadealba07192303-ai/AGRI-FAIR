@@ -46,13 +46,15 @@ class AppColors {
   static const Color inputFill = Color(0xFFD2DCCD);
 }
 
-/// One radius scale. Clay wants generous curves - anything under ~16 reads as
-/// a flat chip no matter how the shadows are set.
+/// One radius scale, kept tighter than clay usually goes.
+///
+/// The shadows carry the shape here, so the corners do not have to. Softer
+/// curves than these started to read as pill-shaped rather than moulded.
 class AppRadius {
-  static const double sm = 16;
-  static const double md = 22;
-  static const double lg = 28;
-  static const double xl = 36;
+  static const double sm = 10;
+  static const double md = 14;
+  static const double lg = 18;
+  static const double xl = 22;
   static const double pill = 999;
 }
 

@@ -5,6 +5,14 @@
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!--
+      Only asked for when someone taps the address on Home, and only to fill
+      in a delivery address they would otherwise type. Coarse is listed too so
+      a person can grant the vaguer one and still get a usable town name.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <application
         android:label="AgriFair"
         android:name="${applicationName}"

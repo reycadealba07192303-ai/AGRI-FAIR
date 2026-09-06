@@ -7,6 +7,7 @@ import '../models/cart.dart';
 import '../models/product.dart';
 import '../models/user_model.dart';
 import '../services/api_client.dart';
+import '../services/location_service.dart';
 import '../services/product_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/agri_banner.dart';
@@ -28,27 +29,16 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _searchController = TextEditingController();
-
   List<Product> _products = const [];
   String _variety = RiceVariety.all.value;
   String? _error;
   bool _loading = true;
-
-  /// Typing sends one request when the person stops, not one per keystroke.
-  Timer? _searchDebounce;
+  bool _locating = false;
 
   @override
   void initState() {
     super.initState();
     _load();
-  }
-
-  @override
-  void dispose() {
-    _searchDebounce?.cancel();
-    _searchController.dispose();
-    super.dispose();
   }
 
   Future<void> _load() async {
@@ -58,10 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final term = _searchController.text.trim();
-      final products = term.isEmpty
-          ? await ProductService.instance.list(variety: _variety)
-          : await ProductService.instance.search(term);
+      final products = await ProductService.instance.list(variety: _variety);
 
       if (!mounted) return;
       setState(() {
@@ -77,18 +64,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _onSearchChanged(String _) {
-    _searchDebounce?.cancel();
-    _searchDebounce = Timer(const Duration(milliseconds: 400), _load);
-  }
-
   void _selectVariety(String value) {
     if (_variety == value) return;
     setState(() => _variety = value);
-    // A filter and a search term answer different questions; picking a variety
-    // clears the box rather than quietly combining the two.
-    _searchController.clear();
     _load();
+  }
+
+  /// Fills in the delivery address from the phone, on request.
+  ///
+  /// Only ever from a tap. A rice app that reaches for someone's coordinates
+  /// on launch has not earned that, and the address is wanted for one reason -
+  /// checkout needs it - so it is asked for where that is obvious.
+  Future<void> _useMyLocation() async {
+    if (_locating) return;
+    setState(() => _locating = true);
+
+    final result = await LocationService.instance.currentAddress();
+    if (!mounted) return;
+
+    setState(() => _locating = false);
+
+    if (result.isOk) {
+      UserModel.of(context).updateProfile(deliveryAddress: result.address);
+      return;
+    }
+
+    // Blocked for good is the one case a retry cannot fix, so that message
+    // comes with the way out rather than a dead "Try again".
+    final blocked = result.outcome == LocationOutcome.deniedForever;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(result.message),
+          duration: const Duration(seconds: 5),
+          action: blocked
+              ? SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: LocationService.instance.openSettings,
+                )
+              : null,
+        ),
+      );
   }
 
   void _openProduct(Product product) {
@@ -109,8 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
         .toList();
   }
 
-  bool get _searching => _searchController.text.trim().isNotEmpty;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -123,19 +140,13 @@ class _HomeScreenState extends State<HomeScreen> {
           child: CustomScrollView(
             slivers: [
               SliverToBoxAdapter(child: _header()),
-              SliverToBoxAdapter(child: _searchBar()),
-
-              // While searching, the banner, chips and recommendations are
-              // noise between the query and its answers.
-              if (!_searching) ...[
-                const SliverToBoxAdapter(
-                  child: Padding(
-                    padding: EdgeInsets.only(top: 20),
-                    child: AgriBannerStrip(),
-                  ),
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.only(top: 20),
+                  child: AgriBannerStrip(),
                 ),
-                SliverToBoxAdapter(child: _varietyRow()),
-              ],
+              ),
+              SliverToBoxAdapter(child: _varietyRow()),
 
               SliverToBoxAdapter(child: _gridHeading()),
               _grid(),
@@ -171,31 +182,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Icon(
-                      address.isEmpty
-                          ? Icons.add_location_alt_outlined
-                          : Icons.place_rounded,
-                      size: 13,
-                      color: AppColors.primaryMedium,
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        // An empty address is an invitation, not a blank: it
-                        // is needed at checkout anyway.
-                        address.isEmpty ? 'Add a delivery address' : address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w500,
+                GestureDetector(
+                  onTap: _useMyLocation,
+                  behavior: HitTestBehavior.opaque,
+                  child: Row(
+                    children: [
+                      if (_locating)
+                        const SizedBox(
+                          height: 12,
+                          width: 12,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 1.8,
+                            valueColor:
+                                AlwaysStoppedAnimation(AppColors.primaryMedium),
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.my_location_rounded,
+                          size: 13,
+                          color: AppColors.primaryMedium,
+                        ),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          _locating
+                              ? 'Finding you...'
+                              : address.isEmpty
+                                  ? 'Use my location'
+                                  : address,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.textMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      if (!_locating && address.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        const Icon(
+                          Icons.refresh_rounded,
+                          size: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -221,39 +255,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _searchBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: TextField(
-        controller: _searchController,
-        onChanged: _onSearchChanged,
-        textInputAction: TextInputAction.search,
-        onSubmitted: (_) => _load(),
-        decoration: InputDecoration(
-          hintText: 'Search rice',
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            color: AppColors.textMuted,
-            size: 21,
-          ),
-          suffixIcon: !_searching
-              ? null
-              : IconButton(
-                  icon: const Icon(
-                    Icons.close_rounded,
-                    size: 19,
-                    color: AppColors.textMuted,
-                  ),
-                  onPressed: () {
-                    _searchController.clear();
-                    _load();
-                  },
-                ),
-        ),
       ),
     );
   }
@@ -302,16 +303,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _gridHeading() {
     if (_loading || _error != null) return const SizedBox(height: 24);
 
-    final label = _searching
-        ? 'Results'
-        : _variety.isEmpty
-            ? 'All rice'
-            : RiceVariety.values
-                .firstWhere(
-                  (v) => v.value == _variety,
-                  orElse: () => RiceVariety.all,
-                )
-                .label;
+    final label = _variety.isEmpty
+        ? 'All rice'
+        : RiceVariety.values
+            .firstWhere(
+              (v) => v.value == _variety,
+              orElse: () => RiceVariety.all,
+            )
+            .label;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 26, 20, 14),
@@ -386,18 +385,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return SliverFillRemaining(
         hasScrollBody: false,
         child: ClayEmptyState(
-          icon: _searching ? Icons.search_off_rounded : Icons.storefront_outlined,
-          title: _searching ? 'No rice matched' : 'Nothing here yet',
-          message: _searching
-              ? 'Try a different word, or clear the search to see everything.'
+          icon: Icons.storefront_outlined,
+          title: 'Nothing here yet',
+          message: _variety.isEmpty
+              ? 'No seller has listed rice yet. Pull down to check again.'
               : 'No seller has listed rice of this kind yet. Try another variety.',
-          actionLabel: _searching ? 'Clear search' : null,
-          onAction: _searching
-              ? () {
-                  _searchController.clear();
-                  _load();
-                }
-              : null,
+          actionLabel: _variety.isEmpty ? null : 'Show all rice',
+          onAction: _variety.isEmpty ? null : () => _selectVariety(''),
         ),
       );
     }
