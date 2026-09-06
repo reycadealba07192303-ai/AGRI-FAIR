@@ -1,5 +1,11 @@
 import express from 'express';
-import { listShops, getSellerProfile, getSellerProducts } from '../controllers/sellerController.js';
+import { protect } from '../middleware/authMiddleware.js';
+import {
+  listShops,
+  getSellerProfile,
+  getSellerPayment,
+  getSellerProducts,
+} from '../controllers/sellerController.js';
 
 const router = express.Router();
 
@@ -9,5 +15,9 @@ const router = express.Router();
 router.get('/', listShops);
 router.get('/:id', getSellerProfile);
 router.get('/:id/products', getSellerProducts);
+
+// Signed in only. The profile withholds account numbers on purpose; a buyer
+// about to send money is a different case from a passer-by.
+router.get('/:id/payment', protect, getSellerPayment);
 
 export default router;

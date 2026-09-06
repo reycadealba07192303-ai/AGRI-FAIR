@@ -34,6 +34,19 @@ export const getSellerProfile = async (req, res) => {
   }
 };
 
+export const getSellerPayment = async (req, res) => {
+  try {
+    const details = await sellerService.getPaymentDetails(Number(req.params.id));
+    return res.json({
+      success: true,
+      message: 'Payment details retrieved successfully',
+      data: details,
+    });
+  } catch (err) {
+    return fail(res, err, 'Could not load payment details');
+  }
+};
+
 export const getSellerProducts = async (req, res) => {
   try {
     const products = await sellerService.getPublicProducts(Number(req.params.id));

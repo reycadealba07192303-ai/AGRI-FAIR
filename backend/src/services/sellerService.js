@@ -130,6 +130,47 @@ export const sellerService = {
       });
   },
 
+  /**
+   * How to pay this seller, for a buyer at checkout.
+   *
+   * The public profile deliberately withholds this - an account number is not
+   * something to hand every passer-by. But a buyer about to send money needs
+   * the number and the QR, so this sits behind a signed-in route instead.
+   *
+   * Only a payout a Super Admin has verified is returned: an unchecked QR
+   * could send someone's money anywhere.
+   */
+  async getPaymentDetails(userId) {
+    if (!Number.isFinite(userId)) throw new Error('Invalid seller id');
+
+    const user = await findUserByUserIdSafe(userId);
+    if (!user || user.role !== 'seller') throw new Error('Seller not found');
+
+    const payout = user.payout || {};
+
+    if (payout.status !== 'verified') {
+      return {
+        sellerId: userId,
+        sellerName: user.sellerProfile?.businessName || user.name,
+        available: false,
+        // Said plainly, because the app has to offer cash on delivery instead
+        // rather than showing an empty QR box.
+        reason: 'This seller has not set up online payment yet.',
+      };
+    }
+
+    return {
+      sellerId: userId,
+      sellerName: user.sellerProfile?.businessName || user.name,
+      available: true,
+      method: payout.method || 'gcash',
+      accountName: payout.accountName || '',
+      accountNumber: payout.accountNumber || '',
+      // Served through the authenticated /api/files route, never statically.
+      qrImage: payout.qrImage || '',
+    };
+  },
+
   /** Only active listings - a buyer browsing a shop should not meet hidden ones. */
   async getPublicProducts(userId) {
     if (!Number.isFinite(userId)) throw new Error('Invalid seller id');

@@ -1,6 +1,7 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
 import { passwordLimiter } from '../middleware/rateLimiter.js';
+import { addressService } from '../services/addressService.js';
 import upload from '../middleware/multerMiddleware.js';
 import {
   getMe,
@@ -22,5 +23,26 @@ router.get('/me', protect, getMe);
 router.put('/edit', protect, profileUpload, updateProfile);
 router.put('/reset-password', protect, passwordLimiter, updatePassword);
 router.get('/login-history', protect, getLoginHistory);
+
+// ---- Saved delivery addresses ----
+const addresses = (fn) => async (req, res) => {
+  try {
+    res.json({ success: true, data: await fn(req) });
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+router.get('/addresses', protect, addresses((req) =>
+  addressService.list(req.user.userId)));
+
+router.post('/addresses', protect, addresses((req) =>
+  addressService.add(req.user.userId, req.body || {})));
+
+router.put('/addresses/:id', protect, addresses((req) =>
+  addressService.update(req.user.userId, req.params.id, req.body || {})));
+
+router.delete('/addresses/:id', protect, addresses((req) =>
+  addressService.remove(req.user.userId, req.params.id)));
 
 export default router;

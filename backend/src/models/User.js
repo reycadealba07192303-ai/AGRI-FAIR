@@ -133,6 +133,28 @@ const userSchema = new mongoose.Schema({
     verifiedBy: { type: Number },
   },
   pickupAddress: { type: String, trim: true, default: '' },
+
+  /**
+   * Where a buyer wants their rice delivered. A list rather than one field:
+   * people order to a home and a workplace, and retyping the whole thing at
+   * every checkout is how a wrong address gets entered.
+   *
+   * Exactly one carries isDefault - the service enforces that, since two
+   * defaults means checkout has to guess.
+   */
+  addresses: [{
+    label: { type: String, trim: true, default: 'Home' },
+    fullName: { type: String, trim: true, required: true },
+    contact: { type: String, trim: true, required: true },
+    line: { type: String, trim: true, required: true },
+    barangay: { type: String, trim: true, default: '' },
+    city: { type: String, trim: true, required: true },
+    province: { type: String, trim: true, default: '' },
+    // "Green gate beside the sari-sari store" - what actually gets a rider
+    // to the door.
+    notes: { type: String, trim: true, default: '' },
+    isDefault: { type: Boolean, default: false },
+  }],
   deliveryOrigin: { type: String, trim: true, default: '' },
   notificationPrefs: {
     order: { type: Boolean, default: true },

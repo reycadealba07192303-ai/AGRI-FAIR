@@ -116,7 +116,16 @@ export const clearCart = async (buyerUserId) => decorate(await cartRepo.clear(bu
  * get paid separately — but all rows share a groupId and order number so the
  * buyer sees one receipt.
  */
-export const checkout = async (buyerUserId, { customerName, customerContact, deliveryAddress, paymentMethod, notes, deliveryFee = 0 }) => {
+export const checkout = async (buyerUserId, {
+  customerName,
+  customerContact,
+  deliveryAddress,
+  paymentMethod,
+  notes,
+  deliveryFee = 0,
+  paymentProof = '',
+  paymentReference = '',
+}) => {
   const cart = await cartRepo.getOrCreate(buyerUserId);
   if (!cart.items.length) throw new Error('Your cart is empty.');
 
@@ -146,6 +155,13 @@ export const checkout = async (buyerUserId, { customerName, customerContact, del
       deliveryFee: fee,
       total: line.lineTotal + fee,
       paymentMethod: paymentMethod || 'Cash/COD',
+
+      // A receipt attached at checkout means the buyer has already sent the
+      // money and is waiting on the seller to confirm it. Without one the
+      // order is simply unpaid - cash on delivery, or GCash still to be sent.
+      paymentStatus: paymentProof ? 'proof_sent' : 'unpaid',
+      paymentProof,
+      paymentReference,
       customerName: customerName.trim(),
       customerContact: customerContact?.trim() || buyer?.contact || '',
       deliveryAddress: deliveryAddress.trim(),

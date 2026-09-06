@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect } from '../middleware/authMiddleware.js';
+import upload from '../middleware/multerMiddleware.js';
 import * as cartService from '../services/cartService.js';
 
 const router = express.Router();
@@ -18,6 +19,16 @@ router.post('/items', handle((req) => cartService.addItem(req.user.userId, req.b
 router.put('/items/:productId', handle((req) => cartService.setQuantity(req.user.userId, req.params.productId, req.body?.quantity)));
 router.delete('/items/:productId', handle((req) => cartService.removeItem(req.user.userId, req.params.productId)));
 router.delete('/', handle((req) => cartService.clearCart(req.user.userId)));
-router.post('/checkout', handle((req) => cartService.checkout(req.user.userId, req.body || {})));
+// Multipart, because a GCash order carries the receipt with it. The file is
+// optional - cash on delivery sends none - and lands in the private uploads
+// folder, reachable only through the authenticated /api/files route.
+router.post(
+  '/checkout',
+  upload.single('paymentProof'),
+  handle((req) => cartService.checkout(req.user.userId, {
+    ...(req.body || {}),
+    paymentProof: req.file ? `/api/files/${req.file.filename}` : '',
+  })),
+);
 
 export default router;

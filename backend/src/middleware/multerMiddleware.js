@@ -17,11 +17,12 @@ for (const dir of [PUBLIC_DIR, PRIVATE_DIR]) {
  * Anything a buyer is meant to see (product photos, farm photos, avatars) goes to
  * PUBLIC_DIR, which is served statically.
  *
- * Credentials — BIR certificates, permits, payment QR codes — go to PRIVATE_DIR,
+ * Credentials — BIR certificates, permits, payment QR codes — and payment
+ * receipts go to PRIVATE_DIR,
  * which is never served statically. They are only readable through the
  * authenticated /api/files route, which checks who is asking.
  */
-const PRIVATE_FIELDS = new Set(['paymentQr', 'document']);
+const PRIVATE_FIELDS = new Set(['paymentQr', 'document', 'paymentProof']);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
