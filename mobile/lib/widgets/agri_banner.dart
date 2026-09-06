@@ -3,11 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import '../widgets/clay.dart';
+import 'clay.dart';
 
-/// A short note about how buying here works.
+/// A short note about how buying here works, over a photograph of the farm
+/// side of it.
 ///
-/// Three of them, and they are app copy rather than data: there is no
+/// Three of them, and the words are app copy rather than data: there is no
 /// promotions system behind this, so a card promising a discount would be
 /// invented. These say something true about the platform instead, in as few
 /// words as will fit.
@@ -15,33 +16,28 @@ class AgriNote {
   const AgriNote({
     required this.title,
     required this.body,
-    required this.icon,
-    required this.tint,
+    required this.image,
   });
 
   final String title;
   final String body;
-  final IconData icon;
-  final Color tint;
+  final String image;
 
   static const notes = [
     AgriNote(
       title: 'Straight from the farm',
       body: 'No middleman between the grower and your kitchen.',
-      icon: Icons.agriculture_rounded,
-      tint: AppColors.primaryDark,
+      image: 'assets/banners/ricefarm.png',
     ),
     AgriNote(
       title: 'Sellers are checked',
       body: 'A verified badge means real permits were reviewed.',
-      icon: Icons.verified_rounded,
-      tint: AppColors.primaryMedium,
+      image: 'assets/banners/ricefarm2.jpg',
     ),
     AgriNote(
       title: 'Bigger sacks cost less',
       body: 'Sellers set their own discount per kilo.',
-      icon: Icons.inventory_2_rounded,
-      tint: AppColors.accent,
+      image: 'assets/banners/ricefarm3.png',
     ),
   ];
 }
@@ -95,7 +91,7 @@ class _AgriBannerStripState extends State<AgriBannerStrip> {
     return Column(
       children: [
         SizedBox(
-          height: 108,
+          height: 158,
           child: NotificationListener<ScrollStartNotification>(
             onNotification: (notification) {
               if (notification.dragDetails != null) _stopAutoAdvance();
@@ -112,7 +108,7 @@ class _AgriBannerStripState extends State<AgriBannerStrip> {
             ),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 13),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -144,21 +140,35 @@ class _NoteCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ClayCard(
-      padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+      padding: EdgeInsets.zero,
       radius: AppRadius.xl,
-      child: Row(
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Container(
-            height: 52,
-            width: 52,
-            decoration: BoxDecoration(
-              color: note.tint.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AppRadius.md),
-            ),
-            child: Icon(note.icon, size: 25, color: note.tint),
+          Image.asset(
+            note.image,
+            fit: BoxFit.cover,
+            // A missing asset should leave a plain green panel with readable
+            // text on it, not a broken-image glyph in the middle of Home.
+            errorBuilder: (_, _, _) => Container(color: AppColors.primaryDark),
           ),
-          const SizedBox(width: 15),
-          Expanded(
+
+          // The text sits bottom-left, so the scrim runs that way rather than
+          // dimming the whole photograph.
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerRight,
+                end: Alignment.bottomLeft,
+                colors: [Color(0x33101A14), Color(0xF0101A14)],
+              ),
+            ),
+          ),
+
+          Positioned(
+            left: 20,
+            right: 20,
+            bottom: 18,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -168,20 +178,21 @@ class _NoteCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15.5,
+                    fontSize: 19,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.3,
-                    color: AppColors.textDark,
+                    letterSpacing: -0.4,
+                    color: Colors.white,
+                    height: 1.15,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
                 Text(
                   note.body,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12.5,
-                    color: AppColors.textMuted,
+                    color: Color(0xE6FFFFFF),
                     height: 1.35,
                   ),
                 ),

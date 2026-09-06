@@ -9,6 +9,7 @@ import '../services/product_service.dart';
 import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
+import '../widgets/product_carousel.dart';
 import '../widgets/review_overview.dart';
 import '../widgets/seller_card.dart';
 import 'cart_screen.dart';
@@ -32,6 +33,7 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   Product? _product;
   ReviewSummary _reviews = ReviewSummary.empty;
+  List<Product> _alsoLike = const [];
   String? _error;
   bool _loading = true;
 
@@ -73,12 +75,54 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _tierIndex = product.sellableTiers.length > 1 ? 1 : 0;
         _loading = false;
       });
+
+      // Fetched after the page is on screen rather than held in front of it:
+      // nobody is waiting on the row at the very bottom.
+      _loadSuggestions(product);
     } on ApiException catch (err) {
       if (!mounted) return;
       setState(() {
         _error = err.message;
         _loading = false;
       });
+    }
+  }
+
+  /// Other rice worth looking at, once this one is being considered.
+  ///
+  /// Same variety first - someone reading about Jasmine is deciding between
+  /// Jasmines - then anything else, so the row is never empty just because a
+  /// seller listed only one of a kind. The product being read is excluded, and
+  /// so is anything out of stock.
+  Future<void> _loadSuggestions(Product product) async {
+    try {
+      final sameVariety = await ProductService.instance.list(
+        variety: product.variety,
+      );
+
+      var pool = sameVariety
+          .where((p) => p.id != product.id && p.inStock)
+          .toList();
+
+      if (pool.length < 4) {
+        final everything = await ProductService.instance.list();
+        final seen = {product.id, ...pool.map((p) => p.id)};
+
+        pool = [
+          ...pool,
+          ...everything.where((p) => !seen.contains(p.id) && p.inStock),
+        ];
+      }
+
+      pool.sort((a, b) {
+        final byRating = b.averageRating.compareTo(a.averageRating);
+        return byRating != 0 ? byRating : b.soldCount.compareTo(a.soldCount);
+      });
+
+      if (!mounted) return;
+      setState(() => _alsoLike = pool.take(8).toList());
+    } on ApiException {
+      // A row of suggestions is the least of what this page is for.
     }
   }
 
@@ -214,6 +258,25 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               ),
             ),
           ),
+
+          // Suggestions run edge to edge, so the row scrolls out of the screen
+          // rather than stopping short inside the page's margins.
+          if (_alsoLike.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 28),
+                child: ProductCarousel(
+                  title: 'You might also like',
+                  subtitle: 'Other rice buyers looked at',
+                  products: _alsoLike,
+                  onTap: (product) => Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (_) => ProductDetailScreen(productId: product.id),
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );

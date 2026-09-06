@@ -99,22 +99,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  /// What to put in front of someone with nothing else to go on.
-  ///
-  /// There is no purchase history to personalise from yet, so this ranks by
-  /// what other buyers rated well and bought - which is a recommendation, not
-  /// a guess dressed up as one. Rating leads; sales break the ties, so a
-  /// single five-star review does not outrank a hundred sales.
-  List<Product> get _recommended {
-    final inStock = _products.where((p) => p.inStock).toList()
-      ..sort((a, b) {
-        final byRating = b.averageRating.compareTo(a.averageRating);
-        return byRating != 0 ? byRating : b.soldCount.compareTo(a.soldCount);
-      });
-
-    return inStock.take(6).toList();
-  }
-
   /// Only the varieties a seller has actually listed. A chip that filters to
   /// an empty screen is a dead end, so kinds nobody stocks are left out.
   List<RiceVariety> get _stockedVarieties {
@@ -151,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 SliverToBoxAdapter(child: _varietyRow()),
-                SliverToBoxAdapter(child: _recommendedStrip()),
               ],
 
               SliverToBoxAdapter(child: _gridHeading()),
@@ -271,53 +254,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                 ),
         ),
-      ),
-    );
-  }
-
-  Widget _recommendedStrip() {
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.fromLTRB(20, 26, 20, 0),
-        child: ClaySkeleton(height: 170, radius: AppRadius.xl),
-      );
-    }
-
-    final recommended = _recommended;
-    if (recommended.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(top: 26),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20),
-            child: Text(
-              'Recommended',
-              style: TextStyle(
-                fontSize: 16.5,
-                fontWeight: FontWeight.w700,
-                letterSpacing: -0.3,
-                color: AppColors.textDark,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            height: 170,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              itemCount: recommended.length,
-              separatorBuilder: (_, _) => const SizedBox(width: 14),
-              itemBuilder: (context, i) => _ShowcaseCard(
-                product: recommended[i],
-                onTap: () => _openProduct(recommended[i]),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -482,142 +418,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           childCount: _products.length,
         ),
-      ),
-    );
-  }
-}
-
-/// A wide card for the strip across the top: the photo carries it, with the
-/// name and price laid over a scrim so they stay readable on any image.
-class _ShowcaseCard extends StatelessWidget {
-  const _ShowcaseCard({required this.product, required this.onTap});
-
-  final Product product;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClayCard(
-      onTap: onTap,
-      width: 278,
-      padding: EdgeInsets.zero,
-      radius: AppRadius.xl,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (product.primaryImageUrl.isEmpty)
-            Container(
-              color: AppColors.surfaceSunken,
-              child: const Icon(
-                Icons.rice_bowl_outlined,
-                size: 44,
-                color: AppColors.primaryLight,
-              ),
-            )
-          else
-            CachedNetworkImage(
-              imageUrl: product.primaryImageUrl,
-              fit: BoxFit.cover,
-              errorWidget: (_, _, _) => Container(
-                color: AppColors.surfaceSunken,
-                child: const Icon(
-                  Icons.rice_bowl_outlined,
-                  size: 44,
-                  color: AppColors.primaryLight,
-                ),
-              ),
-              placeholder: (_, _) => Container(color: AppColors.surfaceSunken),
-            ),
-
-          // Dark only at the foot, where the text sits, so the rice itself
-          // stays as bright as it was photographed. It starts low and stays
-          // short of opaque: enough to carry white text, not enough to turn a
-          // good photo into a silhouette.
-          const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment(0, 0.15),
-                end: Alignment.bottomCenter,
-                colors: [Color(0x00101A14), Color(0xC2101A14)],
-              ),
-            ),
-          ),
-
-          Positioned(
-            top: 12,
-            left: 12,
-            child: ClayBadge(
-              label: product.variety,
-              color: AppColors.primaryDark,
-              compact: true,
-            ),
-          ),
-
-          Positioned(
-            left: 14,
-            right: 14,
-            bottom: 13,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  product.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: -0.3,
-                  ),
-                ),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Text(
-                      '₱${product.startingPrice.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
-                        letterSpacing: -0.4,
-                      ),
-                    ),
-                    const Text(
-                      ' /kg',
-                      style: TextStyle(fontSize: 11.5, color: Color(0xCCFFFFFF)),
-                    ),
-                    const Spacer(),
-                    if (product.averageRating > 0) ...[
-                      const Icon(
-                        Icons.star_rounded,
-                        size: 14,
-                        color: AppColors.accent,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        '${product.averageRating}',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ] else if (product.soldCount > 0)
-                      Text(
-                        '${product.soldCount} sold',
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          color: Color(0xCCFFFFFF),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

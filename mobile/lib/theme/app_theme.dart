@@ -9,10 +9,15 @@ import 'package:google_fonts/google_fonts.dart';
 /// That is why the surface and background colours are so close. Pushing them
 /// apart turns every element back into a flat card and the effect collapses.
 class AppColors {
-  // Grounds
-  static const Color background = Color(0xFFE8EDE6);
-  static const Color surface = Color(0xFFF2F5F0);
-  static const Color surfaceSunken = Color(0xFFDFE5DC);
+  // Grounds.
+  //
+  // The gap between these three is what makes clay visible at all. Too close
+  // and the shadows have nothing to fall on - the first version had them a
+  // shade apart and every card read as flat. The background has to be dark
+  // enough for a white highlight to show against it.
+  static const Color background = Color(0xFFDFE7DB);
+  static const Color surface = Color(0xFFF3F7F1);
+  static const Color surfaceSunken = Color(0xFFD2DCCD);
 
   // Brand
   static const Color primaryDark = Color(0xFF1B3829);
@@ -30,13 +35,15 @@ class AppColors {
   static const Color success = Color(0xFF3F7D53);
   static const Color warning = Color(0xFFB8832F);
 
-  // Clay lighting
-  static const Color shadowDark = Color(0x33667A6C);
-  static const Color shadowLight = Color(0xF2FFFFFF);
+  // Clay lighting. One light source, upper left: a dark shadow cast down-right
+  // and a bright highlight catching the upper-left edge. Both have to be
+  // strong enough to see on a phone in daylight.
+  static const Color shadowDark = Color(0x5C5A705E);
+  static const Color shadowLight = Color(0xFFFFFFFF);
 
   // Kept so older screens keep compiling while they are moved over.
-  static const Color border = Color(0xFFD3DBD0);
-  static const Color inputFill = Color(0xFFEDF1EA);
+  static const Color border = Color(0xFFCBD5C6);
+  static const Color inputFill = Color(0xFFD2DCCD);
 }
 
 /// One radius scale. Clay wants generous curves - anything under ~16 reads as
@@ -54,28 +61,29 @@ class AppShadows {
   static const List<BoxShadow> raised = [
     BoxShadow(
       color: AppColors.shadowDark,
-      offset: Offset(6, 6),
-      blurRadius: 14,
+      offset: Offset(8, 8),
+      blurRadius: 18,
     ),
     BoxShadow(
       color: AppColors.shadowLight,
-      offset: Offset(-5, -5),
-      blurRadius: 12,
+      offset: Offset(-7, -7),
+      blurRadius: 16,
     ),
   ];
 
   /// Softer, for elements repeated many times down a list, where the full
-  /// treatment turns into visual noise.
+  /// treatment turns into visual noise. Still visible - the point of the
+  /// lighter pair is less shout, not no shape.
   static const List<BoxShadow> subtle = [
     BoxShadow(
-      color: Color(0x22667A6C),
-      offset: Offset(4, 4),
-      blurRadius: 10,
+      color: Color(0x3D5A705E),
+      offset: Offset(5, 5),
+      blurRadius: 12,
     ),
     BoxShadow(
-      color: Color(0xCCFFFFFF),
-      offset: Offset(-3, -3),
-      blurRadius: 8,
+      color: Color(0xF7FFFFFF),
+      offset: Offset(-4, -4),
+      blurRadius: 10,
     ),
   ];
 
