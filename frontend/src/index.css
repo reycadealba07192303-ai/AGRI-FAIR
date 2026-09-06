@@ -1,0 +1,36 @@
+/* Global Reset — AgriFair */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  width: 100%;
+  min-height: 100vh;
+}
+
+body {
+  min-width: 320px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Remove Vite default link/button overrides */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+button:focus-visible {
+  outline: 2px solid #4a8c4a;
+  outline-offset: 2px;
+}

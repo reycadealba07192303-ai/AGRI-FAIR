@@ -1,0 +1,171 @@
+import mongoose from 'mongoose';
+import Order from '../models/Order.js';
+import { findUserByUserId } from '../repositories/userRepository.js';
+
+/** Buyer-facing stages, collapsing the seller's finer statuses. */
+export const STAGES = ['pending', 'confirmed', 'preparing', 'delivery', 'delivered'];
+
+const STAGE_OF = {
+  pending: 'pending',
+  confirmed: 'confirmed',
+  processing: 'preparing',
+  shipped: 'delivery',
+  delivered: 'delivered',
+  completed: 'delivered',
+};
+
+const MESSAGE = {
+  pending: 'Waiting for the seller to confirm your order.',
+  confirmed: 'The seller confirmed your order.',
+  preparing: 'Your rice is being prepared.',
+  delivery: 'Your order is on the way!',
+  delivered: 'Your order has been delivered.',
+  cancelled: 'This order was cancelled.',
+};
+
+/**
+ * Orders placed through the cart share a UUID groupId; anything older is keyed
+ * by its own _id. Feeding a UUID to an _id query throws a CastError, so the
+ * _id clause is only added when the value could actually be one.
+ */
+function matchGroup(buyerUserId, groupId) {
+  const clauses = [{ groupId }];
+  if (mongoose.isValidObjectId(groupId)) clauses.push({ _id: groupId });
+  return { buyerUserId, $or: clauses };
+}
+
+/**
+ * A checkout writes one Order row per line item so each seller fulfils its own,
+ * but the buyer placed a single order. Rows are folded back together by groupId.
+ */
+function groupOrders(rows) {
+  const groups = new Map();
+
+  for (const row of rows) {
+    // Older orders predate groupId; fall back to their own id.
+    const key = row.groupId || String(row._id);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        groupId: key,
+        orderNumber: row.orderNumber || key.slice(-6).toUpperCase(),
+        orderDate: row.orderDate,
+        paymentMethod: row.paymentMethod,
+        paymentStatus: row.paymentStatus,
+        deliveryAddress: row.deliveryAddress,
+        customerName: row.customerName,
+        customerContact: row.customerContact,
+        notes: row.notes,
+        items: [],
+        subtotal: 0,
+        deliveryFee: 0,
+        total: 0,
+        statuses: [],
+      });
+    }
+
+    const g = groups.get(key);
+    g.items.push({
+      orderId: String(row._id),
+      sellerId: row.sellerId,
+      productId: String(row.productId),
+      productName: row.productName,
+      quantity: row.quantity,
+      unitPrice: row.unitPrice,
+      lineTotal: row.subtotal,
+      status: row.status,
+    });
+    g.subtotal += Number(row.subtotal || 0);
+    g.deliveryFee += Number(row.deliveryFee || 0);
+    g.total += Number(row.total || 0);
+    g.statuses.push(row.status);
+  }
+
+  return [...groups.values()].map((g) => {
+    // The order is only as far along as its slowest line, and any cancelled
+    // line makes the whole basket cancelled for the buyer's purposes.
+    const cancelled = g.statuses.every((s) => s === 'cancelled');
+    const stageIndex = cancelled
+      ? -1
+      : Math.min(...g.statuses
+          .filter((s) => s !== 'cancelled')
+          .map((s) => STAGES.indexOf(STAGE_OF[s] || 'pending')));
+
+    const stage = cancelled ? 'cancelled' : STAGES[stageIndex] ?? 'pending';
+
+    return {
+      ...g,
+      statuses: undefined,
+      stage,
+      stageIndex: cancelled ? -1 : stageIndex,
+      message: MESSAGE[stage],
+      isOngoing: !cancelled && stage !== 'delivered',
+      // Set by the callers, which know the per-line statuses.
+      canCancel: false,
+    };
+  });
+}
+
+export const getMyOrders = async (buyerUserId, { ongoing } = {}) => {
+  const rows = await Order.find({ buyerUserId }).sort({ orderDate: -1 }).lean();
+  const groups = groupOrders(rows);
+
+  // Cancelling is only offered while nothing has been committed yet.
+  for (const g of groups) {
+    g.canCancel = g.items.every((i) => i.status === 'pending');
+  }
+
+  if (ongoing === true) return groups.filter((g) => g.isOngoing);
+  if (ongoing === false) return groups.filter((g) => !g.isOngoing);
+  return groups;
+};
+
+export const getMyOrder = async (buyerUserId, groupId) => {
+  const rows = await Order.find(matchGroup(buyerUserId, groupId)).lean();
+
+  if (!rows.length) throw new Error('Order not found');
+
+  const [group] = groupOrders(rows);
+  group.canCancel = group.items.every((i) => i.status === 'pending');
+  return group;
+};
+
+/**
+ * A buyer may call off an order only while every line is still pending — once a
+ * seller confirms, stock is committed and it becomes their decision.
+ */
+export const cancelMyOrder = async (buyerUserId, groupId, reason) => {
+  if (!reason?.trim()) throw new Error('Tell the seller why you are cancelling.');
+
+  const rows = await Order.find(matchGroup(buyerUserId, groupId));
+  if (!rows.length) throw new Error('Order not found');
+
+  const blocked = rows.filter((r) => r.status !== 'pending');
+  if (blocked.length) {
+    throw new Error('The seller already started on this order. Message them to cancel.');
+  }
+
+  for (const row of rows) {
+    row.status = 'cancelled';
+    row.statusReason = reason.trim();
+    row.statusHistory.push({ status: 'cancelled', changedAt: new Date(), reason: reason.trim() });
+    await row.save();
+  }
+
+  return getMyOrder(buyerUserId, groupId);
+};
+
+/** Numbers for the Profile header. */
+export const getMyStats = async (buyerUserId) => {
+  const rows = await Order.find({ buyerUserId }).lean();
+  const groups = groupOrders(rows);
+  const paid = groups.filter((g) => g.stage !== 'cancelled');
+  const user = await findUserByUserId(buyerUserId);
+
+  return {
+    orderCount: paid.length,
+    ongoingCount: groups.filter((g) => g.isOngoing).length,
+    historyCount: groups.filter((g) => !g.isOngoing).length,
+    totalSpent: paid.reduce((sum, g) => sum + Number(g.total || 0), 0),
+    memberSince: user?.createdAt ?? null,
+  };
+};

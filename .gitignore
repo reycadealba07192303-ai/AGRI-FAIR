@@ -1,0 +1,54 @@
+# dependencies
+node_modules/
+
+# env files
+.env
+backend/.env
+frontend/.env
+
+# firebase secrets
+*firebase-adminsdk*.json
+**/serviceAccount*.json
+
+# build
+dist/
+build/
+
+# logs
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# uploads (if any)
+backend/uploads/
+backend/src/uploads/
+
+# Flutter build output only - the source must be committed
+mobile/build/
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/android/local.properties
+mobile/ios/Pods/
+mobile/**/google-services.json
+mobile/**/GoogleService-Info.plist
+mobile/android/.gradle/
+mobile/android/.kotlin/
+
+# --- hindi na kailangan sa public repo ---
+# Stray na kopya sa root. Walang gumagamit nito: ang backend ay ang admin SDK
+# key ang binabasa, at ang Flutter app ay sa mobile/android/app/ hahanap. Ang
+# API key sa loob ay hindi sikreto (nasa loob ito ng bawat APK), pero walang
+# dahilan para ilathala ang isang file na walang nagbabasa.
+/google-services.json
+
+# 20MB na snapshot ng frontend/ na nasa repo na mismo
+frontend.zip
+
+# blangkong file mula sa unang pag-setup
+testfile.txt
+
+# lokal na tool cache
+.qodo/
