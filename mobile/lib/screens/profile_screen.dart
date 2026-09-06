@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../models/user_model.dart';
 import '../models/cart.dart';
-import '../models/order.dart';
 import '../theme/app_theme.dart';
 import 'sign_in_screen.dart';
 import 'edit_profile_screen.dart';
 import 'change_password_screen.dart';
 
+import 'addresses_screen.dart';
 import 'orders_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -50,43 +50,21 @@ class ProfileScreen extends StatelessWidget {
               ]),
               _buildSection('My Orders', [
                 _MenuItem(
-                  icon: Icons.local_shipping_outlined,
-                  label: 'Ongoing Orders',
-                  subtitle: () {
-                    final active = user.orders
-                        .where((o) =>
-                            o.status != 'Delivered' &&
-                            o.status != 'Cancelled')
-                        .length;
-                    return active == 0
-                        ? 'No active orders right now'
-                        : '$active active order${active > 1 ? 's' : ''} in progress';
-                  }(),
-                  badge: () {
-                    final active = user.orders
-                        .where((o) =>
-                            o.status != 'Delivered' &&
-                            o.status != 'Cancelled')
-                        .length;
-                    return active > 0 ? '$active' : null;
-                  }(),
+                  icon: Icons.receipt_long_outlined,
+                  label: 'My Orders',
+                  subtitle: 'To pay, to ship, to receive, to review',
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const OrdersScreen(initialStage: OrderStage.toShip)),
+                    MaterialPageRoute(builder: (_) => const OrdersScreen()),
                   ),
                 ),
                 _MenuItem(
-                  icon: Icons.receipt_long_outlined,
-                  label: 'Order History',
-                  subtitle: user.orders.isEmpty
-                      ? 'No orders placed yet'
-                      : '${user.orders.length} order${user.orders.length > 1 ? 's' : ''} placed',
-                  badge: user.orders.isEmpty ? null : '${user.orders.length}',
+                  icon: Icons.location_on_outlined,
+                  label: 'My Addresses',
+                  subtitle: 'Where your orders are delivered',
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(
-                        builder: (_) => const OrdersScreen()),
+                    MaterialPageRoute(builder: (_) => const AddressesScreen()),
                   ),
                 ),
               ]),
@@ -560,7 +538,6 @@ class _MenuItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String subtitle;
-  final String? badge;
   final Color? iconColor;
   final Color? labelColor;
   final VoidCallback onTap;
@@ -569,7 +546,6 @@ class _MenuItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.subtitle,
-    this.badge,
     this.iconColor,
     this.labelColor,
     required this.onTap,
@@ -620,26 +596,8 @@ class _MenuItem extends StatelessWidget {
                 ],
               ),
             ),
-            if (badge != null)
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-                decoration: BoxDecoration(
-                  color: AppColors.primaryDark,
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                child: Text(
-                  badge!,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              )
-            else
-              const Icon(Icons.chevron_right_rounded,
-                  color: AppColors.textMuted, size: 22),
+            const Icon(Icons.chevron_right_rounded,
+                color: AppColors.textMuted, size: 22),
           ],
         ),
       ),

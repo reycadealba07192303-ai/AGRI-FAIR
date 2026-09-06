@@ -1,40 +1,26 @@
+import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+
+import '../models/address.dart';
 import '../models/cart.dart';
-import '../models/user_model.dart';
-import '../models/notification_model.dart';
+import '../services/address_service.dart';
+import '../services/api_client.dart';
+import '../services/api_config.dart';
+import '../services/checkout_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/clay.dart';
+import 'addresses_screen.dart';
 import 'order_success_screen.dart';
 
-class _PaymentOption {
-  final String id;
-  final String label;
-  final String subtitle;
-  final IconData icon;
-  const _PaymentOption(this.id, this.label, this.subtitle, this.icon);
-}
-
-const _paymentOptions = [
-  _PaymentOption(
-    'cod',
-    'Cash on Delivery',
-    'Pay when your order arrives',
-    Icons.money_rounded,
-  ),
-  _PaymentOption(
-    'gcash',
-    'GCash',
-    'Pay via GCash mobile wallet',
-    Icons.phone_android_rounded,
-  ),
-  _PaymentOption(
-    'bank',
-    'Paymongo',
-    'Transfer to our bank account',
-    Icons.account_balance_rounded,
-  ),
-];
-
+/// Where to send it, how to pay, and - for GCash - proof that it was paid.
+///
+/// The receipt travels with the order rather than being uploaded afterwards.
+/// A GCash order with no proof is one the seller cannot act on, and asking for
+/// it in a second step is how it gets skipped.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -43,101 +29,171 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
-  final _addressCtrl = TextEditingController();
-  final _notesCtrl = TextEditingController();
-  String _paymentId = 'cod';
+  final _referenceController = TextEditingController();
+  final _notesController = TextEditingController();
+
+  Address? _address;
+  PaymentMethod _method = PaymentMethod.cashOnDelivery;
+  SellerPayment? _payment;
+  File? _receipt;
+
+  bool _loadingAddress = true;
+  bool _loadingPayment = false;
   bool _placing = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadDefaultAddress();
+  }
+
+  @override
   void dispose() {
-    _nameCtrl.dispose();
-    _phoneCtrl.dispose();
-    _addressCtrl.dispose();
-    _notesCtrl.dispose();
+    _referenceController.dispose();
+    _notesController.dispose();
     super.dispose();
   }
 
-  Future<void> _placeOrder() async {
-    if (!_formKey.currentState!.validate()) return;
-    setState(() => _placing = true);
-    await Future.delayed(const Duration(milliseconds: 1800));
-    if (!mounted) return;
+  Future<void> _loadDefaultAddress() async {
+    try {
+      final addresses = await AddressService.instance.list();
+      if (!mounted) return;
+
+      setState(() {
+        _address = addresses.isEmpty
+            ? null
+            : addresses.firstWhere(
+                (a) => a.isDefault,
+                orElse: () => addresses.first,
+              );
+        _loadingAddress = false;
+      });
+    } on ApiException {
+      if (!mounted) return;
+      // A missing list is not a reason to block checkout - the person can
+      // still add an address from here.
+      setState(() => _loadingAddress = false);
+    }
+  }
+
+  Future<void> _pickAddress() async {
+    final chosen = await Navigator.of(context).push<Address>(
+      MaterialPageRoute(builder: (_) => const AddressesScreen(selecting: true)),
+    );
+
+    if (chosen == null || !mounted) return;
+    setState(() => _address = chosen);
+  }
+
+  /// Loads the seller's GCash details the first time GCash is chosen.
+  ///
+  /// A basket can hold rice from several sellers, and each is paid separately.
+  /// Until checkout splits per seller, this asks the first one - and says so
+  /// on screen rather than quietly showing one seller's QR for the whole
+  /// order.
+  Future<void> _selectMethod(PaymentMethod method) async {
+    setState(() => _method = method);
+
+    if (method != PaymentMethod.gcash || _payment != null) return;
 
     final cart = CartModel.of(context);
-    final user = UserModel.of(context);
-    final paymentLabel = _paymentOptions
-        .firstWhere((o) => o.id == _paymentId)
-        .label;
-    final now = DateTime.now();
-    final orderNumber =
-        'AGF-${(now.millisecondsSinceEpoch % 1000000).toString().padLeft(6, '0')}';
+    final sellerId = cart.items.isEmpty ? 0 : cart.items.first.product.seller?.id;
 
-    final record = OrderRecord(
-      orderNumber: orderNumber,
-      date: now,
-      items: cart.items
-          .map(
-            (i) => OrderItem(
-              productName: i.product.name,
-              weight: i.weightOption.label,
-              quantity: i.quantity,
-              price: i.itemTotal,
-              tagColor: AppColors.primaryLight,
-            ),
-          )
-          .toList(),
-      subtotal: cart.subtotal,
-      deliveryFee: cart.deliveryFee,
-      total: cart.total,
-      paymentMethod: paymentLabel,
-      customerName: _nameCtrl.text.trim(),
-      contactNumber: _phoneCtrl.text.trim(),
-      address: _addressCtrl.text.trim(),
+    if (sellerId == null || sellerId == 0) {
+      setState(() => _payment = null);
+      return;
+    }
+
+    setState(() => _loadingPayment = true);
+
+    try {
+      final payment = await AddressService.instance.paymentFor(sellerId);
+      if (!mounted) return;
+      setState(() {
+        _payment = payment;
+        _loadingPayment = false;
+      });
+    } on ApiException catch (err) {
+      if (!mounted) return;
+      setState(() => _loadingPayment = false);
+      _notify(err.message);
+    }
+  }
+
+  Future<void> _attachReceipt() async {
+    final picked = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 70,
+      maxWidth: 1600,
     );
 
-    user.addOrder(record);
-    cart.clear();
+    if (picked == null || !mounted) return;
+    setState(() => _receipt = File(picked.path));
+  }
 
-    final nm = NotificationModel.of(context);
-    nm.add(
-      AppNotification(
-        id: 'notif_confirmed_$orderNumber',
-        title: 'Order Confirmed!',
-        body:
-            'Your order $orderNumber has been placed successfully. We\'ll start preparing it right away!',
-        type: NotificationType.orderConfirmed,
-        timestamp: DateTime.now(),
-        referenceId: orderNumber,
-      ),
-    );
-    nm.add(
-      AppNotification(
-        id: 'notif_payment_$orderNumber',
-        title: 'Payment Confirmed',
-        body:
-            '$paymentLabel payment for $orderNumber (₱${record.total.toInt()}) has been confirmed.',
-        type: NotificationType.paymentConfirmed,
-        timestamp: DateTime.now(),
-        referenceId: orderNumber,
-      ),
-    );
+  bool get _canPlace {
+    if (_address == null || _placing) return false;
 
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrderSuccessScreen(
-          orderNumber: orderNumber,
-          customerName: _nameCtrl.text.trim(),
-          total: record.total,
-          paymentMethod: paymentLabel,
-          address: _addressCtrl.text.trim(),
+    // GCash without a receipt leaves the seller nothing to check, so the
+    // button stays disabled rather than creating an order they must chase.
+    if (_method == PaymentMethod.gcash && _receipt == null) return false;
+
+    return true;
+  }
+
+  Future<void> _placeOrder() async {
+    if (!_canPlace) return;
+
+    final cart = CartModel.of(context);
+    final address = _address!;
+
+    setState(() => _placing = true);
+
+    try {
+      final result = await CheckoutService.instance.placeOrder(
+        customerName: address.fullName,
+        customerContact: address.contact,
+        deliveryAddress: [
+          address.formatted,
+          if (address.notes.isNotEmpty) '(${address.notes})',
+        ].join(' '),
+        paymentMethod: _method.wireValue,
+        notes: _notesController.text.trim(),
+        deliveryFee: cart.deliveryFee,
+        receiptPath: _receipt?.path,
+        paymentReference: _referenceController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      // Read before clearing: the cart is emptied on the way out and the
+      // success screen still has to show what was bought.
+      final total = cart.total;
+      cart.clear();
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(
+          builder: (_) => OrderSuccessScreen(
+            orderNumber: result.orderNumber,
+            customerName: address.fullName,
+            total: total,
+            paymentMethod: _method.label,
+            address: address.formatted,
+          ),
         ),
-      ),
-      (route) => route.isFirst,
-    );
+        (route) => route.isFirst,
+      );
+    } on ApiException catch (err) {
+      if (!mounted) return;
+      setState(() => _placing = false);
+      _notify(err.message);
+    }
+  }
+
+  void _notify(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -147,421 +203,379 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        automaticallyImplyLeading: false,
-        leading: GestureDetector(
-          onTap: () => Navigator.pop(context),
-          child: const Icon(
-            Icons.arrow_back_ios_new,
-            color: AppColors.primaryDark,
-            size: 18,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12, top: 6, bottom: 6),
+          child: ClayIconButton(
+            icon: Icons.arrow_back_rounded,
+            size: 38,
+            onPressed: () => Navigator.of(context).maybePop(),
           ),
         ),
-        title: const Text(
-          'Checkout',
-          style: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
-        ),
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(1),
-          child: Divider(height: 1, color: AppColors.border),
-        ),
+        leadingWidth: 62,
+        title: const Text('Checkout'),
       ),
-      body: Form(
-        key: _formKey,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(20),
-                children: [
-                  // ── Delivery info ───────────────────────────────────────
-                  _sectionTitle(
-                    Icons.local_shipping_outlined,
-                    'Delivery Information',
-                  ),
-                  const SizedBox(height: 14),
-                  _field(
-                    ctrl: _nameCtrl,
-                    label: 'Full Name',
-                    hint: 'e.g. Juan dela Cruz',
-                    icon: Icons.person_outline_rounded,
-                    required: true,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Please enter your full name'
-                        : null,
-                  ),
-                  const SizedBox(height: 14),
-                  _field(
-                    ctrl: _phoneCtrl,
-                    label: 'Contact Number',
-                    hint: '09XX XXX XXXX',
-                    icon: Icons.phone_outlined,
-                    required: true,
-                    keyboardType: TextInputType.phone,
-                    formatters: [FilteringTextInputFormatter.digitsOnly],
-                    validator: (v) {
-                      if (v == null || v.trim().isEmpty) {
-                        return 'Please enter your contact number';
-                      }
-                      if (v.replaceAll(RegExp(r'\s'), '').length < 10) {
-                        return 'Enter a valid phone number';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  _field(
-                    ctrl: _addressCtrl,
-                    label: 'Complete Address',
-                    hint: 'House No., Street, Barangay, City, Province',
-                    icon: Icons.location_on_outlined,
-                    required: true,
-                    maxLines: 3,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Please enter your complete address'
-                        : null,
-                  ),
-                  const SizedBox(height: 24),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+        children: [
+          _addressSection(),
+          const SizedBox(height: 16),
+          _paymentSection(),
+          const SizedBox(height: 16),
+          _notesSection(),
+          const SizedBox(height: 16),
+          _summary(cart),
+        ],
+      ),
+      bottomNavigationBar: _placeBar(cart),
+    );
+  }
 
-                  // ── Payment method ──────────────────────────────────────
-                  _sectionTitle(Icons.payment_outlined, 'Mode of Payment'),
-                  const SizedBox(height: 14),
-                  ..._paymentOptions.map(
-                    (opt) => _PaymentTile(
-                      opt: opt,
-                      selected: _paymentId == opt.id,
-                      onTap: () => setState(() => _paymentId = opt.id),
-                    ),
+  Widget _addressSection() {
+    return ClayCard(
+      onTap: _pickAddress,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const _Label('Deliver to'),
+              const Spacer(),
+              Text(
+                _address == null ? 'Add' : 'Change',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryMedium,
+                ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 18,
+                color: AppColors.primaryMedium,
+              ),
+            ],
+          ),
+          const SizedBox(height: 11),
+          if (_loadingAddress)
+            const ClaySkeleton(height: 44)
+          else if (_address == null)
+            const Text(
+              'No address yet. Tap to add one — the rider needs somewhere to bring it.',
+              style: TextStyle(
+                fontSize: 13.5,
+                color: AppColors.textMuted,
+                height: 1.45,
+              ),
+            )
+          else ...[
+            Row(
+              children: [
+                Text(
+                  _address!.fullName,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
                   ),
-                  const SizedBox(height: 24),
-
-                  // ── Order notes ─────────────────────────────────────────
-                  _sectionTitle(Icons.note_alt_outlined, 'Order Notes'),
-                  const SizedBox(height: 14),
-                  _field(
-                    ctrl: _notesCtrl,
-                    label: 'Notes (optional)',
-                    hint: 'Special instructions, delivery landmark, etc.',
-                    icon: Icons.edit_note_rounded,
-                    required: false,
-                    maxLines: 2,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _address!.contact,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
                   ),
-                  const SizedBox(height: 24),
-
-                  // ── Order summary ───────────────────────────────────────
-                  _sectionTitle(Icons.receipt_long_outlined, 'Order Summary'),
-                  const SizedBox(height: 14),
-                  _OrderSummaryCard(cart: cart),
-                  const SizedBox(height: 32),
-                ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _address!.formatted,
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textBody,
+                height: 1.45,
               ),
             ),
-            _BottomBar(cart: cart, placing: _placing, onPlace: _placeOrder),
+            if (_address!.notes.isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Text(
+                _address!.notes,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textMuted,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _sectionTitle(IconData icon, String title) {
-    return Row(
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: AppColors.primaryDark.withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(icon, size: 18, color: AppColors.primaryDark),
-        ),
-        const SizedBox(width: 10),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
-        ),
-      ],
+  Widget _paymentSection() {
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _Label('Payment'),
+          const SizedBox(height: 12),
+          for (final method in PaymentMethod.values) ...[
+            _MethodRow(
+              method: method,
+              selected: _method == method,
+              onTap: () => _selectMethod(method),
+            ),
+            if (method != PaymentMethod.values.last) const SizedBox(height: 9),
+          ],
+          if (_method == PaymentMethod.gcash) ...[
+            const SizedBox(height: 14),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            _gcashPanel(),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _field({
-    required TextEditingController ctrl,
-    required String label,
-    required String hint,
-    required IconData icon,
-    required bool required,
-    TextInputType? keyboardType,
-    List<TextInputFormatter>? formatters,
-    String? Function(String?)? validator,
-    int maxLines = 1,
-  }) {
+  Widget _gcashPanel() {
+    if (_loadingPayment) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: 22),
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            valueColor: AlwaysStoppedAnimation(AppColors.primaryMedium),
+          ),
+        ),
+      );
+    }
+
+    final payment = _payment;
+
+    if (payment == null || !payment.available) {
+      return ClaySunken(
+        child: Row(
+          children: [
+            const Icon(
+              Icons.info_outline_rounded,
+              size: 18,
+              color: AppColors.warning,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                payment?.reason ??
+                    'This seller has not set up online payment yet.',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textBody,
+                  height: 1.45,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        RichText(
-          text: TextSpan(
-            text: label,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textDark,
-            ),
-            children: required
-                ? const [
-                    TextSpan(
-                      text: ' *',
-                      style: TextStyle(
-                        color: AppColors.error,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ]
-                : [],
-          ),
-        ),
-        const SizedBox(height: 7),
-        TextFormField(
-          controller: ctrl,
-          keyboardType: keyboardType,
-          inputFormatters: formatters,
-          maxLines: maxLines,
-          validator: validator,
+        Text(
+          'Send the payment to ${payment.sellerName}',
           style: const TextStyle(
-            fontSize: 15,
+            fontSize: 13.5,
+            fontWeight: FontWeight.w700,
             color: AppColors.textDark,
-            fontWeight: FontWeight.w500,
-          ),
-          decoration: InputDecoration(
-            hintText: hint,
-            prefixIcon: Icon(icon, color: AppColors.primaryMedium, size: 20),
-            filled: true,
-            fillColor: AppColors.surface,
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: maxLines > 1 ? 14 : 0,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.border, width: 1.5),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.border, width: 1.5),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(
-                color: AppColors.primaryMedium,
-                width: 2,
-              ),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.error, width: 1.5),
-            ),
-            focusedErrorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.error, width: 2),
-            ),
           ),
         ),
-      ],
-    );
-  }
-}
-
-// ── Sub-widgets ───────────────────────────────────────────────────────────────
-
-class _PaymentTile extends StatelessWidget {
-  final _PaymentOption opt;
-  final bool selected;
-  final VoidCallback onTap;
-  const _PaymentTile({
-    required this.opt,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.primaryDark.withValues(alpha: 0.05)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? AppColors.primaryDark : AppColors.border,
-            width: selected ? 2 : 1.5,
-          ),
-        ),
-        child: Row(
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: selected ? AppColors.primaryDark : AppColors.background,
-                borderRadius: BorderRadius.circular(11),
-              ),
-              child: Icon(
-                opt.icon,
-                size: 20,
-                color: selected ? Colors.white : AppColors.textMuted,
-              ),
-            ),
-            const SizedBox(width: 14),
+            if (payment.hasQr) ...[
+              _QrImage(path: payment.qrImage),
+              const SizedBox(width: 14),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    opt.label,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: AppColors.textDark,
+                  if (payment.accountName.isNotEmpty) ...[
+                    const Text(
+                      'Account name',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
                     ),
+                    Text(
+                      payment.accountName,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                  ],
+                  const Text(
+                    'GCash number',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                   ),
-                  Text(
-                    opt.subtitle,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          payment.accountNumber,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.textDark,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      // Typing an eleven-digit number into GCash by hand is
+                      // where a payment goes to the wrong person.
+                      GestureDetector(
+                        onTap: () {
+                          Clipboard.setData(
+                            ClipboardData(text: payment.accountNumber),
+                          );
+                          _notify('Number copied');
+                        },
+                        child: const Icon(
+                          Icons.copy_rounded,
+                          size: 15,
+                          color: AppColors.primaryMedium,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              width: 22,
-              height: 22,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selected ? AppColors.primaryDark : AppColors.border,
-                  width: 2,
-                ),
-                color: selected ? AppColors.primaryDark : Colors.transparent,
+          ],
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _referenceController,
+          decoration: const InputDecoration(
+            labelText: 'Reference number (optional)',
+            hintText: 'From your GCash receipt',
+          ),
+        ),
+        const SizedBox(height: 12),
+        _receiptPicker(),
+      ],
+    );
+  }
+
+  Widget _receiptPicker() {
+    if (_receipt != null) {
+      return ClaySunken(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+              child: Image.file(
+                _receipt!,
+                height: 54,
+                width: 54,
+                fit: BoxFit.cover,
               ),
-              child: selected
-                  ? const Icon(
-                      Icons.check_rounded,
-                      size: 13,
-                      color: Colors.white,
-                    )
-                  : null,
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Receipt attached',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'The seller checks this before confirming.',
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            TextButton(
+              onPressed: _attachReceipt,
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.primaryMedium,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: const Text(
+                'Change',
+                style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: _attachReceipt,
+      child: DottedPanel(
+        child: Column(
+          children: [
+            const Icon(
+              Icons.receipt_long_rounded,
+              size: 24,
+              color: AppColors.primaryMedium,
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Upload your GCash receipt',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              'Pay first, then attach the screenshot',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppColors.textMuted.withValues(alpha: 0.9),
+              ),
             ),
           ],
         ),
       ),
     );
   }
-}
 
-class _OrderSummaryCard extends StatelessWidget {
-  final CartModel cart;
-  const _OrderSummaryCard({required this.cart});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.border),
-      ),
+  Widget _notesSection() {
+    return ClayCard(
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...cart.items.map(
-            (item) => Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 0),
-              child: Row(
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryLight.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.rice_bowl_rounded,
-                      color: AppColors.primaryLight.withValues(alpha: 0.6),
-                      size: 22,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          item.product.name,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textDark,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          '${item.weightOption.label}  ×  ${item.quantity}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Text(
-                    '₱${item.itemTotal.toInt()}',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
-          const Divider(height: 1, color: AppColors.border),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              children: [
-                _summaryRow('Subtotal', '₱${cart.subtotal.toInt()}'),
-                const SizedBox(height: 6),
-                _summaryRow('Delivery Fee', '₱${cart.deliveryFee.toInt()}'),
-                const SizedBox(height: 10),
-                const Divider(color: AppColors.border),
-                const SizedBox(height: 10),
-                _summaryRow(
-                  'Total Amount',
-                  '₱${cart.total.toInt()}',
-                  bold: true,
-                ),
-              ],
+          const _Label('Note for the seller'),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _notesController,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              hintText: 'Optional — delivery time, anything else',
             ),
           ),
         ],
@@ -569,52 +583,70 @@ class _OrderSummaryCard extends StatelessWidget {
     );
   }
 
-  Widget _summaryRow(String label, String value, {bool bold = false}) {
+  Widget _summary(CartModel cart) {
+    return ClayCard(
+      child: Column(
+        children: [
+          _row('Subtotal', cart.subtotal),
+          const SizedBox(height: 8),
+          _row('Delivery', cart.deliveryFee),
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Text(
+                'Total',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '₱${cart.total.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(String label, double value) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
-          style: TextStyle(
-            fontSize: bold ? 15 : 13,
-            fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-            color: bold ? AppColors.textDark : AppColors.textMuted,
-          ),
+          style: const TextStyle(fontSize: 13.5, color: AppColors.textMuted),
         ),
+        const Spacer(),
         Text(
-          value,
-          style: TextStyle(
-            fontSize: bold ? 17 : 13,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            color: bold ? AppColors.primaryDark : AppColors.textDark,
-          ),
+          '₱${value.toStringAsFixed(0)}',
+          style: const TextStyle(fontSize: 13.5, color: AppColors.textBody),
         ),
       ],
     );
   }
-}
 
-class _BottomBar extends StatelessWidget {
-  final CartModel cart;
-  final bool placing;
-  final VoidCallback onPlace;
-  const _BottomBar({
-    required this.cart,
-    required this.placing,
-    required this.onPlace,
-  });
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _placeBar(CartModel cart) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
-      decoration: BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
+      decoration: const BoxDecoration(
         color: AppColors.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
+            color: Color(0x1F667A6C),
+            offset: Offset(0, -6),
+            blurRadius: 18,
           ),
         ],
       ),
@@ -623,64 +655,169 @@ class _BottomBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Total Amount',
-                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            // Says why the button is off, instead of leaving someone tapping a
+            // dead control and guessing.
+            if (!_canPlace && !_placing) ...[
+              Text(
+                _address == null
+                    ? 'Add a delivery address to continue'
+                    : 'Attach your GCash receipt to continue',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
                 ),
-                Text(
-                  '₱${cart.total.toInt()}',
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryDark,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: placing ? null : onPlace,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryDark,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.primaryDark.withValues(
-                    alpha: 0.55,
-                  ),
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: placing
-                    ? const SizedBox(
-                        width: 22,
-                        height: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-                    : const Text(
-                        'Place Order',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
               ),
+              const SizedBox(height: 10),
+            ],
+            ClayButton(
+              label: 'Place Order  ·  ₱${cart.total.toStringAsFixed(0)}',
+              isLoading: _placing,
+              onPressed: _canPlace ? _placeOrder : null,
             ),
-            const SizedBox(height: 8),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _MethodRow extends StatelessWidget {
+  const _MethodRow({
+    required this.method,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final PaymentMethod method;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 170),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.surfaceSunken : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          border: Border.all(
+            color: selected ? AppColors.primaryMedium : AppColors.border,
+            width: selected ? 1.6 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              method == PaymentMethod.gcash
+                  ? Icons.qr_code_rounded
+                  : Icons.payments_rounded,
+              size: 19,
+              color: selected ? AppColors.primaryMedium : AppColors.textMuted,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                method.label,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  color: selected ? AppColors.textDark : AppColors.textBody,
+                ),
+              ),
+            ),
+            Icon(
+              selected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 19,
+              color: selected ? AppColors.primaryMedium : AppColors.textMuted,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The seller's QR, loaded from the authenticated files route.
+class _QrImage extends StatelessWidget {
+  const _QrImage({required this.path});
+
+  final String path;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Map<String, String>>(
+      future: ApiClient.instance.imageHeaders(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const ClaySkeleton(height: 108, width: 108);
+        }
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: CachedNetworkImage(
+            imageUrl: ApiConfig.mediaUrl(path),
+            httpHeaders: snapshot.data,
+            height: 108,
+            width: 108,
+            fit: BoxFit.cover,
+            errorWidget: (_, _, _) => Container(
+              height: 108,
+              width: 108,
+              color: AppColors.surfaceSunken,
+              child: const Icon(
+                Icons.qr_code_2_rounded,
+                size: 34,
+                color: AppColors.textMuted,
+              ),
+            ),
+            placeholder: (_, _) => const ClaySkeleton(height: 108, width: 108),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A dashed drop target for the receipt.
+class DottedPanel extends StatelessWidget {
+  const DottedPanel({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSunken.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: AppColors.primaryLight, width: 1.4),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _Label extends StatelessWidget {
+  const _Label(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text.toUpperCase(),
+      style: const TextStyle(
+        fontSize: 10.5,
+        fontWeight: FontWeight.w800,
+        letterSpacing: 1.1,
+        color: AppColors.textMuted,
       ),
     );
   }

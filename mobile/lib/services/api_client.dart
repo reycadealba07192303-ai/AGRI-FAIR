@@ -145,6 +145,43 @@ class ApiClient {
             body: jsonEncode(body ?? {}),
           ));
 
+  /// Sends fields and one optional file as multipart.
+  ///
+  /// Checkout needs this: a GCash order carries the receipt with it, and a
+  /// cash-on-delivery order carries none, so the file has to be optional
+  /// rather than a second request that could fail on its own.
+  Future<dynamic> postMultipart(
+    String path, {
+    Map<String, String> fields = const {},
+    String? filePath,
+    String fileField = 'file',
+  }) async {
+    return _send(() async {
+      final request = http.MultipartRequest('POST', await _uri(path))
+        ..headers.addAll(await _headers(json: false))
+        ..fields.addAll(fields);
+
+      if (filePath != null && filePath.isNotEmpty) {
+        request.files.add(
+          await http.MultipartFile.fromPath(fileField, filePath),
+        );
+      }
+
+      return http.Response.fromStream(await request.send());
+    });
+  }
+
+  /// Headers for loading an image from the authenticated /api/files route.
+  ///
+  /// Payment QR codes and receipts are never served statically, so an image
+  /// widget pointed at one has to carry the token like any other request.
+  Future<Map<String, String>> imageHeaders() async {
+    final token = await readToken();
+    return {
+      if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+    };
+  }
+
   Future<dynamic> _send(Future<http.Response> Function() request) async {
     late http.Response response;
 
