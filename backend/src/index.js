@@ -78,6 +78,40 @@ const server = http.createServer(app);
 // Initialize WebSocket
 initSockets(server);
 
+/**
+ * Without this, a busy port throws an unhandled 'error' event: eight lines of
+ * Node internals for a problem whose fix is one command. It happens often - a
+ * previous run left behind, or two people starting the server at once.
+ */
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error('');
+    console.error(`❌ Port ${port} is already in use.`);
+    console.error('   Something else is serving on it, most likely an older');
+    console.error('   run of this server that never stopped.');
+    console.error('');
+    console.error(`   Find it:  netstat -ano | findstr :${port}`);
+    console.error('             taskkill /PID <pid> /F');
+    console.error(`   Or:       npx kill-port ${port}`);
+    console.error('');
+    console.error('   Or serve somewhere else: set PORT in backend/.env');
+    console.error('');
+    process.exit(1);
+  }
+
+  if (err.code === 'EACCES') {
+    console.error('');
+    console.error(`❌ Not allowed to listen on port ${port}.`);
+    console.error('   Ports below 1024 need admin rights. Pick a higher one');
+    console.error('   with PORT in backend/.env');
+    console.error('');
+    process.exit(1);
+  }
+
+  console.error('❌ Server could not start:', err);
+  process.exit(1);
+});
+
 server.listen(port, () => {
   console.log("✅ Server is running");
   console.log("ENV CHECK:", {
