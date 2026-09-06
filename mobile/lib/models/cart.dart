@@ -1,76 +1,112 @@
 import 'package:flutter/material.dart';
+
+import '../services/api_client.dart';
+import '../services/cart_service.dart';
 import 'product.dart';
 
-class CartItem {
-  final Product product;
-  final WeightTier weightOption;
-  int quantity;
-
-  CartItem({
-    required this.product,
-    required this.weightOption,
-    this.quantity = 1,
-  });
-
-  /// Keyed by the product's real id, not its name. Two sellers may list rice
-  /// under the same name, and they are not the same line in a basket.
-  String get id => '${product.id}__${weightOption.label}';
-  double get unitPrice => product.priceFor(weightOption);
-  double get itemTotal => unitPrice * quantity;
-}
-
+/// The cart, held on the server.
+///
+/// It used to live only here, in memory. That meant checkout - which reads the
+/// server's cart - always found it empty, and a cart vanished on reinstall and
+/// never followed anyone to another device.
+///
+/// Every operation replaces the whole cart with what the server returns, which
+/// is rebuilt against live products, so a price that moved or an item that
+/// sold out shows up without the app having to ask separately.
 class CartModel extends ChangeNotifier {
-  final List<CartItem> _items = [];
-
   static CartModel of(BuildContext context) => CartNotifier.of(context);
 
-  List<CartItem> get items => List.unmodifiable(_items);
-  int get totalCount => _items.fold(0, (s, i) => s + i.quantity);
-  double get subtotal => _items.fold(0.0, (s, i) => s + i.itemTotal);
-  double get deliveryFee => _items.isEmpty ? 0 : 80;
-  double get total => subtotal + deliveryFee;
+  ServerCart _cart = ServerCart.empty;
+  bool _loading = false;
+  String? _error;
 
-  void addItem(Product product, WeightTier option, int quantity) {
-    final idx = _items.indexWhere(
-      (i) => i.product.id == product.id && i.weightOption.label == option.label,
-    );
-    if (idx >= 0) {
-      _items[idx].quantity += quantity;
-    } else {
-      _items.add(CartItem(product: product, weightOption: option, quantity: quantity));
+  ServerCart get cart => _cart;
+  List<ServerCartItem> get items => _cart.items;
+  bool get isLoading => _loading;
+  String? get error => _error;
+
+  /// Sacks, not kilograms - what the badge on the cart icon counts.
+  int get totalCount => _cart.sackCount;
+  double get subtotal => _cart.subtotal;
+  double get deliveryFee => _cart.deliveryFee;
+  double get total => _cart.total;
+
+  bool get hasUnavailable => _cart.hasUnavailable;
+  List<String> get unavailable => _cart.unavailable;
+
+  /// Loads the cart for whoever just signed in.
+  ///
+  /// Failure is quiet: an empty cart on a bad connection is the same thing the
+  /// person sees anyway, and the screens that matter refetch.
+  Future<void> refresh() async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      _cart = await CartService.instance.fetch();
+      _error = null;
+    } on ApiException catch (err) {
+      _error = err.message;
     }
+
+    _loading = false;
     notifyListeners();
   }
 
-  void removeItem(String id) {
-    _items.removeWhere((i) => i.id == id);
+  /// Empties the local copy without touching the server - used on sign-out,
+  /// where the cart belongs to the account being left behind.
+  void forget() {
+    _cart = ServerCart.empty;
+    _error = null;
     notifyListeners();
   }
 
-  void increment(String id) {
-    final idx = _items.indexWhere((i) => i.id == id);
-    if (idx >= 0) {
-      _items[idx].quantity++;
+  Future<void> _run(Future<ServerCart> Function() action) async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      _cart = await action();
+      _error = null;
+    } finally {
+      _loading = false;
       notifyListeners();
     }
   }
 
-  void decrement(String id) {
-    final idx = _items.indexWhere((i) => i.id == id);
-    if (idx >= 0) {
-      if (_items[idx].quantity <= 1) {
-        _items.removeAt(idx);
-      } else {
-        _items[idx].quantity--;
-      }
-      notifyListeners();
-    }
+  /// Adds sacks of one weight. Throws [ApiException] when the seller does not
+  /// have the stock, so the screen can show the server's own words.
+  Future<void> addItem(Product product, WeightTier tier, int quantity) {
+    return _run(() => CartService.instance.add(
+          productId: product.id,
+          weightKg: tier.weightKg,
+          quantity: quantity,
+        ));
   }
 
-  void clear() {
-    _items.clear();
-    notifyListeners();
+  Future<void> setQuantity(ServerCartItem item, int quantity) {
+    return _run(() => CartService.instance.setQuantity(
+          productId: item.productId,
+          weightKg: item.weightKg,
+          quantity: quantity,
+        ));
   }
+
+  Future<void> increment(ServerCartItem item) =>
+      setQuantity(item, item.quantity + 1);
+
+  /// Down to zero removes the line, which is what the server does with it.
+  Future<void> decrement(ServerCartItem item) =>
+      setQuantity(item, item.quantity - 1);
+
+  Future<void> removeItem(ServerCartItem item) {
+    return _run(() => CartService.instance.remove(
+          productId: item.productId,
+          weightKg: item.weightKg,
+        ));
+  }
+
+  Future<void> clear() => _run(() => CartService.instance.clear());
 }
 
 class CartNotifier extends InheritedNotifier<CartModel> {

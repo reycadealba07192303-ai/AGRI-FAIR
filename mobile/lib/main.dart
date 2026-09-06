@@ -18,6 +18,7 @@ import 'screens/sign_in_screen.dart';
 final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
+  final cart = CartModel();
   // Starts the search for a reachable backend while the first screen builds,
   // so the address is usually settled before anything asks for it. ApiConfig
   // logs which one won; every failure afterwards names the address it tried.
@@ -29,6 +30,9 @@ void main() {
   // here means no screen has to check for an expired token itself.
   ApiClient.instance.onUnauthorized = () {
     user.reset();
+    // The cart belongs to the account that just expired, not to whoever signs
+    // in next.
+    cart.forget();
     navigatorKey.currentState?.pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const SignInScreen()),
       (route) => false,
@@ -37,7 +41,7 @@ void main() {
 
   runApp(
     CartNotifier(
-      model: CartModel(),
+      model: cart,
       child: UserNotifier(
         model: user,
         child: ChatNotifier(
@@ -99,7 +103,13 @@ class _SessionGateState extends State<_SessionGate> {
     try {
       final account = await AuthService.instance.me();
       if (!mounted) return;
+      if (!mounted) return;
       UserModel.of(context).applyAccount(account);
+
+      // The cart lives on the server now, so a restored session gets whatever
+      // was left in it - including from another device.
+      unawaited(CartModel.of(context).refresh());
+
       setState(() {
         _signedIn = true;
         _checking = false;

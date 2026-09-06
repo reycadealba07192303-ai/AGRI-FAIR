@@ -39,6 +39,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   int _tierIndex = 0;
   int _quantity = 1;
+  bool _addingToCart = false;
 
   @override
   void initState() {
@@ -129,24 +130,42 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   WeightTier get _tier => _product!.sellableTiers[_tierIndex];
   double get _lineTotal => _product!.priceFor(_tier) * _quantity;
 
-  void _addToCart({required bool thenOpenCart}) {
+  Future<void> _addToCart({required bool thenOpenCart}) async {
+    if (_addingToCart) return;
+
     final product = _product!;
-    CartModel.of(context).addItem(product, _tier, _quantity);
+    final cart = CartModel.of(context);
 
-    if (thenOpenCart) {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const CartScreen()),
-      );
-      return;
+    setState(() => _addingToCart = true);
+
+    try {
+      await cart.addItem(product, _tier, _quantity);
+      if (!mounted) return;
+      setState(() => _addingToCart = false);
+
+      if (thenOpenCart) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const CartScreen()),
+        );
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text('${_tier.label} × $_quantity added to your cart'),
+          ),
+        );
+    } on ApiException catch (err) {
+      // The seller's stock is the server's to know - "Only 10 kg left" is
+      // more use than anything this screen could guess.
+      if (!mounted) return;
+      setState(() => _addingToCart = false);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(err.message)));
     }
-
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('${_tier.label} × $_quantity added to your cart'),
-        ),
-      );
   }
 
   void _openSeller() {
@@ -571,14 +590,19 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   child: ClayButton(
                     label: 'Add to Cart',
                     filled: false,
-                    onPressed: canBuy ? () => _addToCart(thenOpenCart: false) : null,
+                    isLoading: _addingToCart,
+                    onPressed: canBuy && !_addingToCart
+                        ? () => _addToCart(thenOpenCart: false)
+                        : null,
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: ClayButton(
                     label: 'Buy Now',
-                    onPressed: canBuy ? () => _addToCart(thenOpenCart: true) : null,
+                    onPressed: canBuy && !_addingToCart
+                        ? () => _addToCart(thenOpenCart: true)
+                        : null,
                   ),
                 ),
               ],

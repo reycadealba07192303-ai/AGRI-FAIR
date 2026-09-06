@@ -97,9 +97,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (method != PaymentMethod.gcash || _payment != null) return;
 
     final cart = CartModel.of(context);
-    final sellerId = cart.items.isEmpty ? 0 : cart.items.first.product.seller?.id;
+    final sellerId = cart.items.isEmpty ? 0 : cart.items.first.sellerId;
 
-    if (sellerId == null || sellerId == 0) {
+    if (sellerId == 0) {
       setState(() => _payment = null);
       return;
     }

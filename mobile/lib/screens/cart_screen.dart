@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cart.dart';
+import '../services/cart_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
 import 'checkout_screen.dart';
@@ -134,7 +135,7 @@ class _EmptyCart extends StatelessWidget {
 }
 
 class _CartItemCard extends StatelessWidget {
-  final CartItem item;
+  final ServerCartItem item;
   const _CartItemCard({required this.item});
 
   @override
@@ -155,7 +156,7 @@ class _CartItemCard extends StatelessWidget {
                 child: SizedBox(
                   height: 64,
                   width: 64,
-                  child: item.product.primaryImageUrl.isEmpty
+                  child: item.imageUrl.isEmpty
                       ? Container(
                           color: AppColors.surfaceSunken,
                           child: const Icon(
@@ -165,7 +166,7 @@ class _CartItemCard extends StatelessWidget {
                           ),
                         )
                       : CachedNetworkImage(
-                          imageUrl: item.product.primaryImageUrl,
+                          imageUrl: item.imageUrl,
                           fit: BoxFit.cover,
                           errorWidget: (_, _, _) => Container(
                             color: AppColors.surfaceSunken,
@@ -187,7 +188,7 @@ class _CartItemCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      item.product.name,
+                      item.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -210,7 +211,7 @@ class _CartItemCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(AppRadius.sm),
                           ),
                           child: Text(
-                            item.weightOption.label,
+                            item.weightLabel,
                             style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
@@ -260,7 +261,7 @@ class _CartItemCard extends StatelessWidget {
           Row(
             children: [
               Text(
-                '₱${item.itemTotal.toInt()}',
+                '₱${item.lineTotal.toInt()}',
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
@@ -269,7 +270,7 @@ class _CartItemCard extends StatelessWidget {
                 ),
               ),
               const Spacer(),
-              _qtyBtn(Icons.remove_rounded, () => cart.decrement(item.id)),
+              _qtyBtn(Icons.remove_rounded, () => cart.decrement(item)),
               SizedBox(
                 width: 40,
                 child: Text(
@@ -282,7 +283,7 @@ class _CartItemCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _qtyBtn(Icons.add_rounded, () => cart.increment(item.id)),
+              _qtyBtn(Icons.add_rounded, () => cart.increment(item)),
             ],
           ),
         ],
@@ -302,7 +303,7 @@ class _CartItemCard extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: AppColors.textDark)),
         content: Text(
-          'Remove ${item.product.name} (${item.weightOption.label}) from cart?',
+          'Remove ${item.name} (${item.weightLabel}) from cart?',
           style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
         ),
         actions: [
@@ -314,7 +315,7 @@ class _CartItemCard extends StatelessWidget {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
-              cart.removeItem(item.id);
+              cart.removeItem(item);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,

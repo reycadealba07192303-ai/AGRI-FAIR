@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../models/cart.dart';
 import '../models/user_model.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
@@ -47,6 +50,8 @@ class _SignInScreenState extends State<SignInScreen> {
 
       if (!mounted) return;
       UserModel.of(context).applyAccount(user);
+      // Whatever this account left in its cart, on any device.
+      unawaited(CartModel.of(context).refresh());
 
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => const MainScreen()),

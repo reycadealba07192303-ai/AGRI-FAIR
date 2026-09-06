@@ -4,7 +4,12 @@ import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import { findUserByUserId } from '../repositories/userRepository.js';
 
-/** Price for a weight tier, applying its discount if one is set. */
+/** Two lines are the same line only if the rice and the sack size both match. */
+const sameLine = (item, productId, weightKg) =>
+  String(item.productId) === String(productId) &&
+  Number(item.weightKg || 1) === Number(weightKg);
+
+/** Price of one sack at this weight, applying its tier discount if one is set. */
 function priceForWeight(product, weightKg) {
   const base = Number(product.price || 0) * Number(weightKg);
   const tier = (product.weightTiers || []).find((t) => Number(t.weightKg) === Number(weightKg));
@@ -28,8 +33,16 @@ async function decorate(cart) {
     const product = byId.get(String(item.productId));
     if (!product) continue; // listing was deleted
 
-    const unitNow = Number(product.price || 0);
-    const lineTotal = priceForWeight(product, item.quantity);
+    const weightKg = Number(item.weightKg || 1);
+    const sacks = Number(item.quantity);
+
+    // Priced per sack and multiplied, not priced as one big weight: three
+    // 50 kg sacks earn the 50 kg discount three times, where 150 kg matches
+    // no tier at all and would quietly lose it.
+    const perSack = priceForWeight(product, weightKg);
+    const lineTotal = Math.round(perSack * sacks * 100) / 100;
+
+    const needed = weightKg * sacks;
     const available = Number(product.stock || 0);
 
     items.push({
@@ -38,16 +51,20 @@ async function decorate(cart) {
       name: product.name,
       variety: product.variety || '',
       image: product.images?.[0] || null,
-      quantity: item.quantity,
-      unitPrice: unitNow,
+      weightKg,
+      quantity: sacks,
+      // What the buyer's sacks come to in stock terms, so the seller's page
+      // and the buyer's are talking about the same number.
+      totalKg: needed,
+      unitPrice: perSack,
       unitPriceAtAdd: item.unitPriceAtAdd,
-      priceChanged: Number(item.unitPriceAtAdd) !== unitNow,
+      priceChanged: Number(item.unitPriceAtAdd) !== perSack,
       lineTotal,
-      inStock: available >= item.quantity,
+      inStock: available >= needed,
       availableStock: available,
     });
 
-    if (available >= item.quantity) subtotal += lineTotal;
+    if (available >= needed) subtotal += lineTotal;
   }
 
   const blocked = items.filter((i) => !i.inStock);
@@ -63,27 +80,37 @@ async function decorate(cart) {
 
 export const getCart = async (buyerUserId) => decorate(await cartRepo.getOrCreate(buyerUserId));
 
-export const addItem = async (buyerUserId, { productId, quantity }) => {
-  const qty = Number(quantity);
+export const addItem = async (buyerUserId, { productId, weightKg, quantity }) => {
+  const sacks = Number(quantity);
+  const weight = Number(weightKg || 1);
+
   if (!productId) throw new Error('Which product?');
-  if (!Number.isFinite(qty) || qty <= 0) throw new Error('Choose a valid weight.');
+  if (!Number.isFinite(weight) || weight <= 0) throw new Error('Choose a weight.');
+  if (!Number.isFinite(sacks) || sacks <= 0) throw new Error('Choose how many.');
 
   const product = await Product.findById(productId);
   if (!product) throw new Error('Product not found');
   if (product.status === 'inactive') throw new Error('That product is not for sale right now.');
-  if (Number(product.stock) < qty) throw new Error(`Only ${product.stock} kg left.`);
 
   const cart = await cartRepo.getOrCreate(buyerUserId);
-  const existing = cart.items.find((i) => String(i.productId) === String(productId));
+  const existing = cart.items.find((i) => sameLine(i, productId, weight));
+
+  // Checked against what the cart would hold in total, not just what is being
+  // added, or three separate taps could add past the stock one at a time.
+  const wanted = weight * (sacks + Number(existing?.quantity || 0));
+  if (Number(product.stock) < wanted) {
+    throw new Error(`Only ${product.stock} kg left.`);
+  }
 
   if (existing) {
-    existing.quantity = Number(existing.quantity) + qty;
+    existing.quantity = Number(existing.quantity) + sacks;
   } else {
     cart.items.push({
       productId: product._id,
       sellerId: product.createdBy,
-      quantity: qty,
-      unitPriceAtAdd: Number(product.price || 0),
+      weightKg: weight,
+      quantity: sacks,
+      unitPriceAtAdd: priceForWeight(product, weight),
     });
   }
 
@@ -91,23 +118,30 @@ export const addItem = async (buyerUserId, { productId, quantity }) => {
   return decorate(cart);
 };
 
-export const setQuantity = async (buyerUserId, productId, quantity) => {
-  const qty = Number(quantity);
+export const setQuantity = async (buyerUserId, productId, quantity, weightKg = 1) => {
+  const sacks = Number(quantity);
+  const weight = Number(weightKg || 1);
+
   const cart = await cartRepo.getOrCreate(buyerUserId);
-  const item = cart.items.find((i) => String(i.productId) === String(productId));
+  const item = cart.items.find((i) => sameLine(i, productId, weight));
   if (!item) throw new Error('That item is not in your cart.');
 
-  if (qty <= 0) {
-    cart.items = cart.items.filter((i) => String(i.productId) !== String(productId));
+  if (sacks <= 0) {
+    cart.items = cart.items.filter((i) => !sameLine(i, productId, weight));
   } else {
-    item.quantity = qty;
+    const product = await Product.findById(productId);
+    if (product && Number(product.stock) < weight * sacks) {
+      throw new Error(`Only ${product.stock} kg left.`);
+    }
+    item.quantity = sacks;
   }
 
   await cartRepo.save(cart);
   return decorate(cart);
 };
 
-export const removeItem = async (buyerUserId, productId) => setQuantity(buyerUserId, productId, 0);
+export const removeItem = async (buyerUserId, productId, weightKg = 1) =>
+  setQuantity(buyerUserId, productId, 0, weightKg);
 
 export const clearCart = async (buyerUserId) => decorate(await cartRepo.clear(buyerUserId));
 
@@ -148,7 +182,11 @@ export const checkout = async (buyerUserId, {
     orders.push(await Order.create({
       sellerId: line.sellerId,
       productId: line.productId,
-      productName: line.name,
+      // The name carries the sack size, since an order row for "3 × Jasmine"
+      // does not say whether that is 3 kg or 150.
+      productName: line.weightKg > 1
+        ? `${line.name} (${line.weightKg} kg)`
+        : line.name,
       unitPrice: line.unitPrice,
       quantity: line.quantity,
       subtotal: line.lineTotal,
