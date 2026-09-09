@@ -43,7 +43,14 @@ class Review {
       comment: (json['comment'] ?? '').toString(),
       images:
           (json['images'] as List?)?.map((e) => e.toString()).toList() ?? const [],
-      sellerReply: (json['sellerReply'] ?? '').toString(),
+      // An object - { text, repliedAt } - not a string. Stringifying the whole
+      // thing gave "{text: , repliedAt: null}", which is not empty, so every
+      // review claimed a reply and drew an empty box under itself.
+      sellerReply: switch (json['sellerReply']) {
+        final Map<String, dynamic> reply => (reply['text'] ?? '').toString(),
+        final String text => text,
+        _ => '',
+      },
       createdAt: DateTime.tryParse((json['createdAt'] ?? '').toString()),
     );
   }

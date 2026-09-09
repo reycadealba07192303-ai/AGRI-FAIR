@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
 import 'models/cart.dart';
 import 'models/user_model.dart';
 import 'models/chat_model.dart';
@@ -10,9 +11,9 @@ import 'services/api_client.dart';
 import 'services/api_config.dart';
 import 'services/auth_service.dart';
 import 'theme/app_theme.dart';
-import 'screens/welcome_screen.dart';
-import 'screens/main_screen.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/sign_in_screen.dart';
+import 'screens/splash_screen.dart';
 
 /// Lets the 401 handler navigate from outside the widget tree.
 final navigatorKey = GlobalKey<NavigatorState>();
@@ -69,69 +70,59 @@ class AgriFairApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: buildAppTheme(),
-      home: const _SessionGate(),
+      home: const _LaunchGate(),
     );
   }
 }
 
-/// Decides the first screen: straight into the app if the stored token still
-/// works, otherwise the welcome flow. The token lives in secure storage, so it
-/// survives a restart and the person is not asked to sign in every launch.
-class _SessionGate extends StatefulWidget {
-  const _SessionGate();
+/// Launch order: splash → onboarding → sign in.
+///
+/// Session restore still runs in the background so the token is warm by the
+/// time somebody signs in, but it does not skip past Sign In.
+class _LaunchGate extends StatefulWidget {
+  const _LaunchGate();
 
   @override
-  State<_SessionGate> createState() => _SessionGateState();
+  State<_LaunchGate> createState() => _LaunchGateState();
 }
 
-class _SessionGateState extends State<_SessionGate> {
-  bool _checking = true;
-  bool _signedIn = false;
+enum _LaunchStep { splash, onboarding, ready }
+
+class _LaunchGateState extends State<_LaunchGate> {
+  _LaunchStep _step = _LaunchStep.splash;
 
   @override
   void initState() {
     super.initState();
-    _restore();
+    unawaited(_warmSession());
   }
 
-  Future<void> _restore() async {
-    if (!await ApiClient.instance.hasToken) {
-      if (mounted) setState(() => _checking = false);
-      return;
-    }
+  /// Keeps a stored token applied if it is still good, without routing home.
+  Future<void> _warmSession() async {
+    if (!await ApiClient.instance.hasToken) return;
 
     try {
       final account = await AuthService.instance.me();
       if (!mounted) return;
-      if (!mounted) return;
       UserModel.of(context).applyAccount(account);
-
-      // The cart lives on the server now, so a restored session gets whatever
-      // was left in it - including from another device.
-      unawaited(CartModel.of(context).refresh());
-
-      setState(() {
-        _signedIn = true;
-        _checking = false;
-      });
+      if (account.role != 'rider') {
+        unawaited(CartModel.of(context).refresh());
+      }
     } catch (_) {
-      // Expired, revoked, or the server is unreachable. Starting at the
-      // welcome screen is the honest answer in all three cases.
-      if (mounted) setState(() => _checking = false);
+      // Expired or unreachable — Sign In will ask again.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_checking) {
-      return const Scaffold(
-        backgroundColor: AppColors.primaryDark,
-        body: Center(
-          child: CircularProgressIndicator(color: Colors.white),
+    return switch (_step) {
+      _LaunchStep.splash => SplashScreen(
+          onDone: () => setState(() => _step = _LaunchStep.onboarding),
         ),
-      );
-    }
-
-    return _signedIn ? const MainScreen() : const WelcomeScreen();
+      _LaunchStep.onboarding => OnboardingScreen(
+          onDone: () => setState(() => _step = _LaunchStep.ready),
+        ),
+      _LaunchStep.ready => const SignInScreen(),
+    };
   }
 }

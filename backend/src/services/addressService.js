@@ -1,4 +1,5 @@
 import { findUserByUserId } from '../repositories/userRepository.js';
+import { locateArea } from './geocodeService.js';
 
 /**
  * A buyer's saved delivery addresses.
@@ -16,10 +17,25 @@ function assertOneDefault(addresses) {
   addresses[0].isDefault = true;
 }
 
+/**
+ * A coordinate, or null.
+ *
+ * Anything outside the real range is dropped rather than clamped: a bad
+ * latitude is a bug somewhere upstream, and silently moving it to the pole
+ * would hide that while still sending a rider somewhere.
+ */
+function coordinate(value, limit) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < -limit || n > limit) return null;
+  return n;
+}
+
 function clean(payload = {}) {
   const text = (value) => (typeof value === 'string' ? value.trim() : '');
 
   return {
+    lat: coordinate(payload.lat, 90),
+    lng: coordinate(payload.lng, 180),
     label: text(payload.label) || 'Home',
     fullName: text(payload.fullName),
     contact: text(payload.contact),
@@ -31,6 +47,37 @@ function clean(payload = {}) {
     cityCode: text(payload.cityCode),
     notes: text(payload.notes),
   };
+}
+
+/**
+ * Gives an address a point when the buyer did not pin one.
+ *
+ * Where it is going has to come from the address they gave, not from where
+ * anybody happens to be standing - a buyer ordering from school would
+ * otherwise have their rice sent to school. Only the barangay, city and
+ * province are looked up; the street line never is.
+ *
+ * Failure is silent and harmless: an address without a pin is still a
+ * deliverable address, and the rider reads the words.
+ */
+async function fillAreaPin(fields, { pinnedByBuyer }) {
+  // A pin sent with this request is the buyer standing at their own door.
+  // Read from the request and not from the merged document: an approximate
+  // pin already saved would otherwise be promoted to exact by any later edit
+  // that only changed the label.
+  if (pinnedByBuyer && fields.lat != null && fields.lng != null) {
+    return { ...fields, precision: 'exact' };
+  }
+
+  const area = await locateArea({
+    barangay: fields.barangay,
+    city: fields.city,
+    province: fields.province,
+  });
+
+  if (!area) return { ...fields, lat: null, lng: null, precision: '' };
+
+  return { ...fields, lat: area.lat, lng: area.lng, precision: 'approximate' };
 }
 
 function validate(fields) {
@@ -52,7 +99,9 @@ export const addressService = {
     const user = await findUserByUserId(userId);
     if (!user) throw new Error('User not found');
 
-    const fields = clean(payload);
+    const fields = await fillAreaPin(clean(payload), {
+      pinnedByBuyer: payload.lat != null && payload.lng != null,
+    });
     validate(fields);
 
     // The first address saved is the default whatever the caller asked for -
@@ -79,7 +128,12 @@ export const addressService = {
     const address = user.addresses.id(addressId);
     if (!address) throw new Error('Address not found');
 
-    const fields = clean({ ...address.toObject(), ...payload });
+    // Merged before locating, so editing only the barangay still moves the
+    // pin - and re-locating on every edit keeps the point and the words from
+    // drifting apart.
+    const fields = await fillAreaPin(clean({ ...address.toObject(), ...payload }), {
+      pinnedByBuyer: payload.lat != null && payload.lng != null,
+    });
     validate(fields);
 
     address.set(fields);

@@ -1,17 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../models/cart.dart';
 import '../models/user_model.dart';
 import '../services/api_client.dart';
 import '../services/auth_service.dart';
-import '../theme/app_theme.dart';
-import '../widgets/clay.dart';
+import '../theme/portal_theme.dart';
+import '../widgets/auth_scaffold.dart';
 import 'forgot_password_screen.dart';
+import 'delivery_setup_screen.dart';
 import 'main_screen.dart';
 import 'otp_verification_screen.dart';
+import 'rider_home_screen.dart';
 import 'sign_up_screen.dart';
 
 class SignInScreen extends StatefulWidget {
@@ -50,35 +51,57 @@ class _SignInScreenState extends State<SignInScreen> {
 
       if (!mounted) return;
       UserModel.of(context).applyAccount(user);
-      // Whatever this account left in its cart, on any device.
-      unawaited(CartModel.of(context).refresh());
-
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
-      );
+      _land(user);
     } on ApiException catch (err) {
       if (!mounted) return;
       setState(() => _isLoading = false);
 
-      // An unverified account is a step the person has not finished, not a
-      // dead end. Send them to the six boxes with a fresh code.
       if (err.isEmailNotVerified) {
         _goToVerification(_emailController.text.trim(), err.message);
         return;
       }
 
-      // Everything else the backend writes for a person to read - "Your
-      // account has been suspended", "Invalid credentials" - is shown as-is.
+      if (err.isNotActivated) {
+        _notify(err.message);
+        _setUpDeliveryAccount();
+        return;
+      }
+
       _notify(err.message);
     }
+  }
+
+  void _land(AuthUser user) {
+    if (user.role == 'rider') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const RiderHomeScreen()),
+      );
+      return;
+    }
+
+    unawaited(CartModel.of(context).refresh());
+
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => const MainScreen()),
+    );
+  }
+
+  Future<void> _setUpDeliveryAccount() async {
+    final email = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => DeliverySetupScreen(
+          initialEmail: _emailController.text.trim(),
+        ),
+      ),
+    );
+
+    if (email == null || !mounted) return;
+    setState(() => _emailController.text = email);
   }
 
   void _goToVerification(String email, String message) {
     _notify(message);
 
-    // Straight to the boxes. The screen asks for the code itself as it opens,
-    // so nothing here waits on the network - holding the person on a spinner
-    // while an email is dispatched is what made this feel like a timeout.
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => OtpVerificationScreen(
@@ -98,213 +121,213 @@ class _SignInScreenState extends State<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.dark,
-      child: Scaffold(
-        backgroundColor: AppColors.background,
-        body: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-              child: ConstrainedBox(
-                // Keeps the form from stretching into an unreadable strip on a
-                // tablet or an unfolded phone.
-                constraints: const BoxConstraints(maxWidth: 440),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _backButton(),
-                      const SizedBox(height: 28),
-                      _mark(),
-                      const SizedBox(height: 26),
-                      const Text(
-                        'Welcome back',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1,
-                          color: AppColors.textDark,
-                          height: 1.1,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Sign in to keep shopping for rice.',
-                        style: TextStyle(
-                          fontSize: 14.5,
-                          color: AppColors.textMuted,
-                          height: 1.45,
-                        ),
-                      ),
-                      const SizedBox(height: 30),
-                      _emailField(),
-                      const SizedBox(height: 14),
-                      _passwordField(),
-                      const SizedBox(height: 10),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: _isLoading
-                              ? null
-                              : () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const ForgotPasswordScreen(),
-                                    ),
-                                  ),
-                          style: TextButton.styleFrom(
-                            foregroundColor: AppColors.primaryMedium,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
+    return AuthScaffold(
+      title: 'Welcome Back',
+      subtitle: 'Sign in to continue to AgriFair',
+      onBack: Navigator.of(context).canPop()
+          ? () => Navigator.of(context).maybePop()
+          : null,
+      footer: AuthFooterLink(
+        question: "Don't have an account?",
+        action: 'Sign up',
+        onTap: _isLoading
+            ? () {}
+            : () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                ),
+      ),
+      children: [
+        Form(
+          key: _formKey,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _fieldLabel('Email'),
+              TextFormField(
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
+                enabled: !_isLoading,
+                style: portalBody(size: 15, color: PortalColors.textDark),
+                decoration: const InputDecoration(
+                  hintText: 'Enter your email',
+                  prefixIcon: Icon(Icons.mail_outline_rounded, size: 20),
+                ),
+                validator: (v) {
+                  final value = v?.trim() ?? '';
+                  if (value.isEmpty) return 'Enter your email';
+                  if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value)) {
+                    return 'That does not look like an email';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+              _fieldLabel('Password'),
+              TextFormField(
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                textInputAction: TextInputAction.done,
+                autofillHints: const [AutofillHints.password],
+                enabled: !_isLoading,
+                onFieldSubmitted: (_) => _handleSignIn(),
+                style: portalBody(size: 15, color: PortalColors.textDark),
+                decoration: InputDecoration(
+                  hintText: 'Enter your password',
+                  prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(
+                      () => _obscurePassword = !_obscurePassword,
+                    ),
+                  ),
+                ),
+                validator: (v) {
+                  if (v == null || v.isEmpty) return 'Enter your password';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 6),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const ForgotPasswordScreen(),
                             ),
                           ),
-                          child: const Text(
-                            'Forgot password?',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 18),
-                      ClayButton(
-                        label: 'Sign In',
-                        isLoading: _isLoading,
-                        onPressed: _isLoading ? null : _handleSignIn,
-                      ),
-                      const SizedBox(height: 26),
-                      _signUpRow(),
-                    ],
+                  style: TextButton.styleFrom(
+                    foregroundColor: PortalColors.primaryMedium,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    'Forgot password?',
+                    style: portalBody(
+                      size: 12.5,
+                      weight: FontWeight.w700,
+                      color: PortalColors.primaryMedium,
+                    ),
                   ),
                 ),
               ),
+              const SizedBox(height: 14),
+              AuthButton(
+                label: 'Sign In',
+                isLoading: _isLoading,
+                onPressed: _isLoading ? null : _handleSignIn,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        _orRule(),
+        const SizedBox(height: 12),
+        _delivererRow(),
+      ],
+    );
+  }
+
+  Widget _fieldLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        text,
+        style: portalBody(
+          size: 12.5,
+          weight: FontWeight.w700,
+          color: PortalColors.textDark,
+        ),
+      ),
+    );
+  }
+
+  Widget _orRule() {
+    return Row(
+      children: [
+        const Expanded(child: Divider(color: Color(0xFFCBD5C6), height: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Text(
+            'OR',
+            style: portalBody(
+              size: 11,
+              weight: FontWeight.w700,
+              color: PortalColors.textMuted,
+            ).copyWith(letterSpacing: 1.6),
+          ),
+        ),
+        const Expanded(child: Divider(color: Color(0xFFCBD5C6), height: 1)),
+      ],
+    );
+  }
+
+  Widget _delivererRow() {
+    return AuthClayWell(
+      onTap: _isLoading ? null : _setUpDeliveryAccount,
+      child: Row(
+        children: [
+          Container(
+            height: 42,
+            width: 42,
+            decoration: BoxDecoration(
+              color: PortalColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: PortalClay.soft,
+            ),
+            child: const Icon(
+              Icons.local_shipping_rounded,
+              size: 18,
+              color: PortalColors.primaryMedium,
             ),
           ),
-        ),
-      ),
-    );
-  }
-
-  Widget _backButton() {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: ClayIconButton(
-        icon: Icons.arrow_back_rounded,
-        size: 42,
-        onPressed: () => Navigator.of(context).maybePop(),
-      ),
-    );
-  }
-
-  /// A raised clay disc rather than a flat logo, so the first thing on screen
-  /// already shows what the rest of the app is made of.
-  Widget _mark() {
-    return Center(
-      child: Container(
-        height: 82,
-        width: 82,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          shape: BoxShape.circle,
-          boxShadow: AppShadows.raised,
-        ),
-        child: const Icon(
-          Icons.rice_bowl_rounded,
-          size: 36,
-          color: AppColors.primaryMedium,
-        ),
-      ),
-    );
-  }
-
-  Widget _emailField() {
-    return TextFormField(
-      controller: _emailController,
-      keyboardType: TextInputType.emailAddress,
-      textInputAction: TextInputAction.next,
-      autofillHints: const [AutofillHints.email],
-      enabled: !_isLoading,
-      decoration: const InputDecoration(
-        labelText: 'Email',
-        prefixIcon: Icon(
-          Icons.mail_outline_rounded,
-          size: 20,
-          color: AppColors.textMuted,
-        ),
-      ),
-      validator: (v) {
-        final value = v?.trim() ?? '';
-        if (value.isEmpty) return 'Enter your email';
-        if (!RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$').hasMatch(value)) {
-          return 'That does not look like an email';
-        }
-        return null;
-      },
-    );
-  }
-
-  Widget _passwordField() {
-    return TextFormField(
-      controller: _passwordController,
-      obscureText: _obscurePassword,
-      textInputAction: TextInputAction.done,
-      autofillHints: const [AutofillHints.password],
-      enabled: !_isLoading,
-      onFieldSubmitted: (_) => _handleSignIn(),
-      decoration: InputDecoration(
-        labelText: 'Password',
-        prefixIcon: const Icon(
-          Icons.lock_outline_rounded,
-          size: 20,
-          color: AppColors.textMuted,
-        ),
-        suffixIcon: IconButton(
-          icon: Icon(
-            _obscurePassword
-                ? Icons.visibility_outlined
-                : Icons.visibility_off_outlined,
-            size: 20,
-            color: AppColors.textMuted,
-          ),
-          onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-        ),
-      ),
-      validator: (v) {
-        if (v == null || v.isEmpty) return 'Enter your password';
-        return null;
-      },
-    );
-  }
-
-  Widget _signUpRow() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text(
-          "Don't have an account?",
-          style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
-        ),
-        TextButton(
-          onPressed: _isLoading
-              ? null
-              : () => Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (_) => const SignUpScreen()),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Signing in as a delivery rider?',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: portalBody(
+                    size: 13,
+                    weight: FontWeight.w800,
+                    color: PortalColors.textDark,
                   ),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.primaryMedium,
-            padding: const EdgeInsets.symmetric(horizontal: 6),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Set up with the email your shop used.',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: portalBody(
+                    size: 11.5,
+                    color: PortalColors.textMuted,
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
           ),
-          child: const Text(
-            'Sign up',
-            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+          const SizedBox(width: 4),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 20,
+            color: PortalColors.primaryMedium,
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

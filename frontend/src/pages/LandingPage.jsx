@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './LandingPage.css';
 import logoImg from '../assets/logo.png';
@@ -45,9 +45,44 @@ const STATS = [
   { value: '24/7', label: 'Support', icon: '💬' },
 ];
 
+const HOW_TO_STEPS = [
+  {
+    step: '01',
+    title: 'Install AgriFair',
+    desc: 'Scan the QR on this page and install the buyer app on your phone.',
+  },
+  {
+    step: '02',
+    title: 'Sign up or sign in',
+    desc: 'Create an account with your email, or jump back in if you already have one.',
+  },
+  {
+    step: '03',
+    title: 'Browse shops & chat',
+    desc: 'Explore rice listings, open a seller’s shop, and message them when you need details.',
+  },
+  {
+    step: '04',
+    title: 'Order and track',
+    desc: 'Checkout with COD or GCash, then follow the order until delivery arrives.',
+  },
+];
+
+/** Play Store / APK / hosting URL — set VITE_APP_DOWNLOAD_URL in .env when ready. */
+const APP_DOWNLOAD_URL =
+  import.meta.env.VITE_APP_DOWNLOAD_URL?.trim() || '';
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const heroRef = useRef(null);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const downloadUrl =
+    APP_DOWNLOAD_URL ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}/#download`
+      : '#download');
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${encodeURIComponent(downloadUrl)}`;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -65,6 +100,30 @@ export default function LandingPage() {
     return () => observer.disconnect();
   }, []);
 
+  useEffect(() => {
+    if (!downloadOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setDownloadOpen(false);
+    };
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [downloadOpen]);
+
+  const copyDownloadLink = async () => {
+    try {
+      await navigator.clipboard.writeText(downloadUrl);
+      setLinkCopied(true);
+      window.setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      setLinkCopied(false);
+    }
+  };
+
   return (
     <div className="lp-root">
       {/* NAV */}
@@ -77,7 +136,8 @@ export default function LandingPage() {
           <div className="lp-nav-links">
             <a href="#features">Features</a>
             <a href="#about">About</a>
-            <a href="#video">Highlights</a>
+            <a href="#how-to-use">How to use</a>
+            <a href="#download">Download</a>
             <button className="lp-nav-cta" onClick={() => navigate('/login')}>
               Sign In
             </button>
@@ -184,6 +244,9 @@ export default function LandingPage() {
             <button className="lp-btn-primary" onClick={() => navigate('/login')}>
               Sign In Now <span className="lp-btn-arrow">→</span>
             </button>
+            <a className="lp-btn-howto" href="#how-to-use">
+              How to use the app <span className="lp-btn-arrow">→</span>
+            </a>
           </div>
           <div className="lp-about-visual animate-on-scroll">
             <div className="lp-about-card">
@@ -202,22 +265,134 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="lp-cta">
-        <div className="lp-cta-bg">
-          <div className="lp-blob lp-blob-4" />
-          <div className="lp-blob lp-blob-5" />
+      {/* HOW TO USE — always visible (no scroll-hide) */}
+      <section className="lp-howto" id="how-to-use">
+        <div className="lp-howto-shell">
+          <div className="lp-howto-intro">
+            <span className="lp-howto-badge">Getting started</span>
+            <h2>
+              How to use
+              <br />
+              <em>the AgriFair app</em>
+            </h2>
+            <p>
+              One path from install to delivery. Follow the four steps, then
+              grab the app below.
+            </p>
+            <a className="lp-btn-white" href="#download">
+              Get the app <span className="lp-btn-arrow">→</span>
+            </a>
+          </div>
+          <ol className="lp-howto-rail">
+            {HOW_TO_STEPS.map((item, i) => (
+              <li key={item.step} className="lp-howto-rail-item">
+                <div className="lp-howto-rail-marker">
+                  <span>{item.step}</span>
+                  {i < HOW_TO_STEPS.length - 1 && (
+                    <span className="lp-howto-rail-line" aria-hidden="true" />
+                  )}
+                </div>
+                <div className="lp-howto-rail-copy">
+                  <h3>{item.title}</h3>
+                  <p>{item.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
-        <div className="lp-cta-inner animate-on-scroll">
-          <h2>Ready to manage your fair?</h2>
-          <p>Sign in with your admin credentials to get started.</p>
-          <div className="lp-hero-actions lp-hero-actions-centered">
-            <button className="lp-btn-white" onClick={() => navigate('/login')}>
-              Log In <span className="lp-btn-arrow">→</span>
+      </section>
+
+      {/* DOWNLOAD */}
+      <section className="lp-download" id="download">
+        <div className="lp-download-row">
+          <div className="lp-download-visual">
+            <img
+              className="lp-download-phones"
+              src="/app-preview/mobile-showcase.png"
+              alt="AgriFair mobile app splash and onboarding screens"
+              width={1052}
+              height={922}
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+
+          <div className="lp-download-copy">
+            <p className="lp-download-kicker">For buyers &amp; delivery</p>
+            <h2 className="lp-download-title">
+              Get the app.
+              <br />
+              <span>Shop rice on the go.</span>
+            </h2>
+            <p className="lp-download-sub">
+              Splash, onboarding, then shop. Sellers and admins stay on the web
+              portal — this install is for the mobile experience.
+            </p>
+            <button
+              type="button"
+              className="lp-download-btn"
+              onClick={() => setDownloadOpen(true)}
+            >
+              Download
             </button>
           </div>
         </div>
       </section>
+
+      {downloadOpen && (
+        <div
+          className="lp-dl-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lp-dl-modal-title"
+          onClick={() => setDownloadOpen(false)}
+        >
+          <div
+            className="lp-dl-modal-card"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="lp-dl-modal-close"
+              aria-label="Close"
+              onClick={() => setDownloadOpen(false)}
+            >
+              ×
+            </button>
+            <h3 id="lp-dl-modal-title">Install AgriFair</h3>
+            <p className="lp-dl-modal-hint">
+              Scan the QR with your phone, or open / copy the link below.
+            </p>
+            <img
+              className="lp-dl-modal-qr"
+              src={qrSrc}
+              alt="QR code to download AgriFair"
+              width={200}
+              height={200}
+            />
+            <div className="lp-dl-modal-linkbox">
+              <code>{downloadUrl}</code>
+            </div>
+            <div className="lp-dl-modal-actions">
+              <a
+                className="lp-dl-modal-open"
+                href={downloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Open link
+              </a>
+              <button
+                type="button"
+                className="lp-dl-modal-copy"
+                onClick={copyDownloadLink}
+              >
+                {linkCopied ? 'Copied' : 'Copy link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* VIDEO ADS SECTION */}
       <section className="lp-video-ads" id="video">
@@ -254,7 +429,8 @@ export default function LandingPage() {
             <div className="lp-footer-links">
               <a href="#features">Features</a>
               <a href="#about">About</a>
-              <a href="#video">Highlights</a>
+              <a href="#how-to-use">How to use</a>
+              <a href="#download">Download</a>
             </div>
           </div>
         </div>

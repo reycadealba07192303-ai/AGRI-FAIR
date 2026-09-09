@@ -293,8 +293,15 @@ export const reviewSellerCredential = async (idFromUrl, superAdminId, { kind, do
   return user;
 };
 
-/** Sellers with anything still awaiting review. */
-export const getPendingCredentials = async () => {
+/**
+ * Every seller who has submitted something, whatever was decided about it.
+ *
+ * Not only the ones still waiting: a decision that vanishes the moment it is
+ * made leaves nobody able to check what was approved, or to take an approval
+ * back when a QR turns out to be somebody else's. The panel sorts the ones
+ * needing a decision to the top.
+ */
+export const getSellerCredentials = async () => {
   const users = await SuperAdminRepo.findAllUsers();
 
   return users
@@ -323,5 +330,14 @@ export const getPendingCredentials = async () => {
         uploadedAt: d.uploadedAt,
       })),
     }))
-    .filter((u) => u.payout?.status === 'pending' || u.documents.some((d) => d.status === 'pending'));
+    .filter((u) => u.payout || u.documents.length)
+    .map((u) => ({
+      ...u,
+      // What the panel sorts on, so the queue stays at the top without the UI
+      // having to re-derive it.
+      needsReview:
+        u.payout?.status === 'pending'
+        || u.documents.some((d) => d.status === 'pending'),
+    }))
+    .sort((a, b) => Number(b.needsReview) - Number(a.needsReview));
 };

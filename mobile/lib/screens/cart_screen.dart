@@ -7,8 +7,29 @@ import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
 import 'checkout_screen.dart';
 
-class CartScreen extends StatelessWidget {
+/// What is in the cart, read from the server every time it is opened.
+///
+/// It used to trust the single fetch done at sign-in. When that one call failed
+/// - a dropped connection, a server still waking up - the cart stayed empty for
+/// the rest of the session and the screen said so, which is how a full cart
+/// came to read "Your cart is empty" on the way to checkout.
+class CartScreen extends StatefulWidget {
   const CartScreen({super.key});
+
+  @override
+  State<CartScreen> createState() => _CartScreenState();
+}
+
+class _CartScreenState extends State<CartScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // After the first frame: reading the cart out of the tree needs a context
+    // that is mounted, and refresh() notifies listeners as it starts.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) CartModel.of(context).refresh();
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -51,22 +72,56 @@ class CartScreen extends StatelessWidget {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      body: items.isEmpty
-          ? _EmptyCart(onBrowse: () => Navigator.pop(context))
-          : Column(
-              children: [
-                Expanded(
-                  child: ListView.separated(
-                    padding: const EdgeInsets.all(20),
-                    itemCount: items.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: 12),
-                    itemBuilder: (_, i) =>
-                        _CartItemCard(item: items[i]),
-                  ),
-                ),
-                _OrderSummaryBar(cart: cart),
-              ],
+      body: _body(cart, items),
+    );
+  }
+
+  Widget _body(CartModel cart, List<ServerCartItem> items) {
+    // Never loaded and still trying: skeletons, not an empty cart. The two are
+    // not the same thing and must not look the same.
+    if (!cart.isLoaded && cart.isLoading) {
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: const [
+          ClaySkeleton(height: 104, radius: AppRadius.lg),
+          SizedBox(height: 12),
+          ClaySkeleton(height: 104, radius: AppRadius.lg),
+        ],
+      );
+    }
+
+    // Never loaded and the attempt failed: say what went wrong and offer the
+    // retry, rather than claiming the cart is empty on the server's behalf.
+    if (!cart.isLoaded && cart.error != null) {
+      return ClayEmptyState(
+        icon: Icons.wifi_off_rounded,
+        title: 'Cannot load your cart',
+        message: cart.error!,
+        actionLabel: 'Try again',
+        onAction: () => cart.refresh(),
+      );
+    }
+
+    if (items.isEmpty) {
+      return _EmptyCart(onBrowse: () => Navigator.pop(context));
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: RefreshIndicator(
+            onRefresh: cart.refresh,
+            color: AppColors.primaryMedium,
+            child: ListView.separated(
+              padding: const EdgeInsets.all(20),
+              itemCount: items.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (_, i) => _CartItemCard(item: items[i]),
             ),
+          ),
+        ),
+        _OrderSummaryBar(cart: cart),
+      ],
     );
   }
 }

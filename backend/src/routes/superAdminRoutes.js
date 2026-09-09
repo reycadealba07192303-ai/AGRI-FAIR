@@ -35,7 +35,9 @@ router.put('/users/:id/activate', activateUser);
 router.get('/audit-logs', getAuditLogs);
 router.get('/analytics/revenue', getPlatformRevenue);
 router.get('/analytics/businesses', getBusinessAnalytics);
-router.get('/credentials/pending', getPendingCredentialsHandler);
+// Everything submitted, decided or not - an approval that disappears cannot
+// be checked later, or taken back.
+router.get('/credentials', getPendingCredentialsHandler);
 router.put('/users/:id/credentials', reviewSellerCredentialHandler);
 
 export default router;

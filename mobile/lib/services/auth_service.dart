@@ -22,9 +22,15 @@ class AuthUser {
 
   factory AuthUser.fromJson(Map<String, dynamic> json) {
     return AuthUser(
-      // `/auth/login` returns `id`; `/user/me` returns the raw document with
-      // `_id`. Both name the same person.
-      id: (json['id'] ?? json['_id'] ?? json['userId'] ?? '').toString(),
+      // The numeric userId first, and only then the fallbacks.
+      //
+      // `/auth/login` returns it as `id`, but `/user/me` returns the raw
+      // document, which carries both `_id` and `userId` - and reading `_id`
+      // there meant the same person had one identity after signing in and a
+      // different one after the app restarted and restored the session. Chat
+      // matches on the numeric id, so that mismatch made every message look
+      // like it came from the other person.
+      id: (json['userId'] ?? json['id'] ?? json['_id'] ?? '').toString(),
       email: (json['email'] ?? '').toString(),
       name: (json['name'] ?? '').toString(),
       role: (json['role'] ?? 'buyer').toString(),
@@ -155,6 +161,40 @@ class AuthService {
     });
 
     return _messageFrom(body, 'Password updated.');
+  }
+
+  /// Step one for a delivery rider: is there an account for this email?
+  ///
+  /// Answers honestly, and sends the code to that mailbox. A rider who
+  /// mistypes the address their shop gave them should be told, not left
+  /// waiting for an email that was never coming.
+  ///
+  /// Returns the name on the account, so the next screen can greet them.
+  Future<String> startDeliverySetup(String email) async {
+    final body = await _api.post('/auth/delivery/start', {'email': email.trim()});
+
+    return body is Map<String, dynamic>
+        ? (body['name'] ?? '').toString()
+        : '';
+  }
+
+  /// Step three: the code proves the address, and sets the chosen password.
+  ///
+  /// One call, so a half-finished attempt leaves nothing behind.
+  Future<String> activateAccount({
+    required String email,
+    required String code,
+    required String password,
+  }) async {
+    final body = await _api.post('/auth/activate', {
+      'email': email.trim(),
+      'code': code.trim(),
+      'password': password,
+    });
+
+    return body is Map<String, dynamic>
+        ? (body['message'] ?? 'Account ready.').toString()
+        : 'Account ready.';
   }
 
   Future<AuthUser> me() async {

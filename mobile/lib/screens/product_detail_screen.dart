@@ -9,6 +9,7 @@ import '../services/product_service.dart';
 import '../services/review_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
+import '../widgets/weight_sheet.dart';
 import '../widgets/product_carousel.dart';
 import '../widgets/review_overview.dart';
 import '../widgets/seller_card.dart';
@@ -37,8 +38,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String? _error;
   bool _loading = true;
 
-  int _tierIndex = 0;
-  int _quantity = 1;
   bool _addingToCart = false;
 
   @override
@@ -73,7 +72,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         _product = product;
         // Start on the second tier where there is one: the smallest bag is
         // rarely what someone buying a sack of rice actually wants.
-        _tierIndex = product.sellableTiers.length > 1 ? 1 : 0;
         _loading = false;
       });
 
@@ -127,19 +125,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     }
   }
 
-  WeightTier get _tier => _product!.sellableTiers[_tierIndex];
-  double get _lineTotal => _product!.priceFor(_tier) * _quantity;
-
+  /// Asks for the size and count, then buys.
+  ///
+  /// The sheet is the only place a weight is chosen, so both buttons go
+  /// through here and neither can act on a stale selection left on the page.
   Future<void> _addToCart({required bool thenOpenCart}) async {
     if (_addingToCart) return;
 
     final product = _product!;
     final cart = CartModel.of(context);
 
+    final choice = await showWeightSheet(
+      context,
+      product: product,
+      confirmLabel: thenOpenCart ? 'Buy Now' : 'Add to Cart',
+    );
+
+    if (choice == null || !mounted) return;
+
     setState(() => _addingToCart = true);
 
     try {
-      await cart.addItem(product, _tier, _quantity);
+      await cart.addItem(product, choice.tier, choice.quantity);
       if (!mounted) return;
       setState(() => _addingToCart = false);
 
@@ -154,7 +161,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
-            content: Text('${_tier.label} × $_quantity added to your cart'),
+            content: Text(
+              '${choice.tier.label} × ${choice.quantity} added to your cart',
+            ),
           ),
         );
     } on ApiException catch (err) {
@@ -226,10 +235,6 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _titleRow(product),
-                  const SizedBox(height: 20),
-                  _weightPicker(product),
-                  const SizedBox(height: 16),
-                  _quantityRow(),
 
                   // The seller sits between the price and the reviews: by here
                   // the buyer knows the cost and is deciding whether to trust
@@ -251,6 +256,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         : () => Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) => ProductReviewsScreen(
+                                  productId: product.id,
                                   productName: product.name,
                                 ),
                               ),
@@ -460,79 +466,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
-  Widget _weightPicker(Product product) {
-    final tiers = product.sellableTiers;
-    final hasDiscount = tiers.any((t) => t.discountPercent > 0);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _SectionHeading('Select weight'),
-        if (hasDiscount) ...[
-          const SizedBox(height: 4),
-          const Text(
-            'Larger bags include a bulk discount',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-          ),
-        ],
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 68,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: tiers.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 10),
-            itemBuilder: (context, i) => ClayChip(
-              label: tiers[i].label,
-              sublabel: '₱${product.priceFor(tiers[i]).toStringAsFixed(0)}',
-              selected: i == _tierIndex,
-              onTap: () => setState(() => _tierIndex = i),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _quantityRow() {
-    return Row(
-      children: [
-        const Text(
-          'Quantity',
-          style: TextStyle(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
-        ),
-        const Spacer(),
-        _StepperButton(
-          icon: Icons.remove_rounded,
-          onTap: _quantity > 1 ? () => setState(() => _quantity--) : null,
-        ),
-        SizedBox(
-          width: 46,
-          child: Text(
-            '$_quantity',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
-            ),
-          ),
-        ),
-        _StepperButton(
-          icon: Icons.add_rounded,
-          onTap: () => setState(() => _quantity++),
-        ),
-      ],
-    );
-  }
-
   Widget _buyBar() {
     final product = _product!;
-    final canBuy = product.inStock;
+    final cheapest = product.firstAvailableOption;
+    final canBuy = cheapest != null;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
@@ -558,11 +495,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Total',
+                      'From',
                       style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                     ),
                     Text(
-                      '₱${_lineTotal.toStringAsFixed(0)}',
+                      // The cheapest sack that can actually be bought today,
+                      // not a total for a purchase nobody has chosen yet.
+                      cheapest == null
+                          ? 'Sold out'
+                          : '₱${cheapest.price.toStringAsFixed(0)}',
                       style: const TextStyle(
                         fontSize: 25,
                         fontWeight: FontWeight.w800,
@@ -574,7 +515,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  '${_tier.label} × $_quantity',
+                  cheapest == null
+                      ? 'No sizes available'
+                      : 'per ${cheapest.label} sack',
                   style: const TextStyle(
                     fontSize: 13,
                     color: AppColors.textMuted,
@@ -628,33 +571,6 @@ class _SectionHeading extends StatelessWidget {
         fontWeight: FontWeight.w700,
         letterSpacing: -0.2,
         color: AppColors.textDark,
-      ),
-    );
-  }
-}
-
-class _StepperButton extends StatelessWidget {
-  const _StepperButton({required this.icon, this.onTap});
-
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-
-    return Opacity(
-      opacity: enabled ? 1 : 0.4,
-      child: ClayCard(
-        onTap: onTap,
-        radius: AppRadius.pill,
-        padding: EdgeInsets.zero,
-        shadows: AppShadows.subtle,
-        child: SizedBox(
-          height: 38,
-          width: 38,
-          child: Icon(icon, size: 18, color: AppColors.textDark),
-        ),
       ),
     );
   }

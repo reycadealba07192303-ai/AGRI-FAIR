@@ -1,25 +1,11 @@
 import 'package:flutter/material.dart';
 
-enum NotificationType {
-  orderConfirmed,
-  orderPacked,
-  outForDelivery,
-  delivered,
-  orderCancelled,
-  paymentConfirmed,
-  newMessage,
-  reviewSubmitted,
-}
+import '../services/api_client.dart';
+import '../services/notification_service.dart';
+
+enum NotificationType { order, payment, message, stock, system }
 
 class AppNotification {
-  final String id;
-  final String title;
-  final String body;
-  final NotificationType type;
-  final DateTime timestamp;
-  final bool isRead;
-  final String? referenceId;
-
   const AppNotification({
     required this.id,
     required this.title,
@@ -27,8 +13,16 @@ class AppNotification {
     required this.type,
     required this.timestamp,
     this.isRead = false,
-    this.referenceId,
+    this.link = '',
   });
+
+  final String id;
+  final String title;
+  final String body;
+  final NotificationType type;
+  final DateTime timestamp;
+  final bool isRead;
+  final String link;
 
   AppNotification copyWith({bool? isRead}) => AppNotification(
         id: id,
@@ -37,110 +31,108 @@ class AppNotification {
         type: type,
         timestamp: timestamp,
         isRead: isRead ?? this.isRead,
-        referenceId: referenceId,
+        link: link,
       );
+
+  factory AppNotification.fromJson(Map<String, dynamic> json) {
+    return AppNotification(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      title: (json['title'] ?? '').toString(),
+      body: (json['body'] ?? '').toString(),
+      type: _parseType((json['type'] ?? 'SYSTEM').toString()),
+      timestamp: DateTime.tryParse((json['createdAt'] ?? '').toString()) ??
+          DateTime.now(),
+      isRead: json['read'] == true,
+      link: (json['link'] ?? '').toString(),
+    );
+  }
+
+  static NotificationType _parseType(String raw) {
+    switch (raw.toUpperCase()) {
+      case 'ORDER':
+        return NotificationType.order;
+      case 'PAYMENT':
+        return NotificationType.payment;
+      case 'MESSAGE':
+        return NotificationType.message;
+      case 'STOCK':
+        return NotificationType.stock;
+      default:
+        return NotificationType.system;
+    }
+  }
 }
 
 class NotificationModel extends ChangeNotifier {
-  final List<AppNotification> _notifications;
+  NotificationModel();
 
-  NotificationModel() : _notifications = _seed();
-
-  static List<AppNotification> _seed() => [
-        AppNotification(
-          id: 'n1',
-          title: 'New Message from Admin',
-          body: 'Your recent inquiry has been resolved. Let us know if you need anything else!',
-          type: NotificationType.newMessage,
-          timestamp: DateTime.now().subtract(const Duration(hours: 1, minutes: 20)),
-          isRead: false,
-        ),
-        AppNotification(
-          id: 'n2',
-          title: 'New Message from Admin',
-          body: 'Hi there! We have received your message. Our team will get back to you shortly.',
-          type: NotificationType.newMessage,
-          timestamp: DateTime.now().subtract(const Duration(hours: 5, minutes: 10)),
-          isRead: false,
-        ),
-        AppNotification(
-          id: 'n3',
-          title: 'Order Delivered Successfully',
-          body: 'Your order AGF-001234 has arrived. We hope you enjoy your premium rice!',
-          type: NotificationType.delivered,
-          timestamp: DateTime.now().subtract(const Duration(days: 2)),
-          isRead: true,
-          referenceId: 'AGF-001234',
-        ),
-        AppNotification(
-          id: 'n4',
-          title: 'Out for Delivery',
-          body:
-              'Your order AGF-001234 is on its way! The courier is heading to your location.',
-          type: NotificationType.outForDelivery,
-          timestamp: DateTime.now().subtract(const Duration(days: 2, hours: 4)),
-          isRead: true,
-          referenceId: 'AGF-001234',
-        ),
-        AppNotification(
-          id: 'n5',
-          title: 'Order Packed',
-          body:
-              'Your order AGF-001234 has been carefully packed and is ready for pickup by the courier.',
-          type: NotificationType.orderPacked,
-          timestamp: DateTime.now().subtract(const Duration(days: 3)),
-          isRead: true,
-          referenceId: 'AGF-001234',
-        ),
-        AppNotification(
-          id: 'n6',
-          title: 'Payment Confirmed',
-          body:
-              'Your GCash payment for order AGF-001234 (₱480) has been confirmed. Thank you!',
-          type: NotificationType.paymentConfirmed,
-          timestamp: DateTime.now().subtract(const Duration(days: 3, hours: 1)),
-          isRead: true,
-          referenceId: 'AGF-001234',
-        ),
-        AppNotification(
-          id: 'n7',
-          title: 'Order Confirmed!',
-          body:
-              'Your order AGF-001234 has been placed successfully. We are now preparing your items.',
-          type: NotificationType.orderConfirmed,
-          timestamp: DateTime.now().subtract(const Duration(days: 3, hours: 2)),
-          isRead: true,
-          referenceId: 'AGF-001234',
-        ),
-      ];
+  final List<AppNotification> _notifications = [];
+  int _unreadCount = 0;
+  bool _loading = false;
+  String? _error;
 
   List<AppNotification> get notifications =>
       [..._notifications]..sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
-  int get unreadCount => _notifications.where((n) => !n.isRead).length;
+  int get unreadCount => _unreadCount;
+  bool get loading => _loading;
+  String? get error => _error;
 
-  void add(AppNotification notification) {
-    _notifications.add(notification);
+  Future<void> load() async {
+    _loading = true;
+    _error = null;
     notifyListeners();
-  }
 
-  void markRead(String id) {
-    final idx = _notifications.indexWhere((n) => n.id == id);
-    if (idx != -1 && !_notifications[idx].isRead) {
-      _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+    try {
+      final result = await NotificationService.instance.list();
+      _notifications
+        ..clear()
+        ..addAll(result.items);
+      _unreadCount = result.unreadCount;
+      _loading = false;
+      notifyListeners();
+    } on ApiException catch (err) {
+      _loading = false;
+      _error = err.message;
+      notifyListeners();
+    } catch (_) {
+      _loading = false;
+      _error = 'Could not load notifications.';
       notifyListeners();
     }
   }
 
-  void markAllRead() {
-    bool changed = false;
-    for (int i = 0; i < _notifications.length; i++) {
+  Future<void> markRead(String id) async {
+    final idx = _notifications.indexWhere((n) => n.id == id);
+    if (idx < 0 || _notifications[idx].isRead) return;
+
+    _notifications[idx] = _notifications[idx].copyWith(isRead: true);
+    _unreadCount = (_unreadCount - 1).clamp(0, 1 << 30);
+    notifyListeners();
+
+    try {
+      await NotificationService.instance.markRead(id);
+    } catch (_) {
+      // Keep the local read state; the next load will reconcile.
+    }
+  }
+
+  Future<void> markAllRead() async {
+    if (_unreadCount == 0) return;
+
+    for (var i = 0; i < _notifications.length; i++) {
       if (!_notifications[i].isRead) {
         _notifications[i] = _notifications[i].copyWith(isRead: true);
-        changed = true;
       }
     }
-    if (changed) notifyListeners();
+    _unreadCount = 0;
+    notifyListeners();
+
+    try {
+      await NotificationService.instance.markAllRead();
+    } catch (_) {
+      // Same as markRead — optimistic UI, reconcile on reload.
+    }
   }
 
   static NotificationModel of(BuildContext context) =>
@@ -154,8 +146,7 @@ class NotificationNotifier extends InheritedNotifier<NotificationModel> {
     required super.child,
   }) : super(notifier: model);
 
-  static NotificationModel of(BuildContext context) =>
-      context
-          .dependOnInheritedWidgetOfExactType<NotificationNotifier>()!
-          .notifier!;
+  static NotificationModel of(BuildContext context) => context
+      .dependOnInheritedWidgetOfExactType<NotificationNotifier>()!
+      .notifier!;
 }

@@ -4,6 +4,7 @@ import '../models/address.dart';
 import '../services/address_service.dart';
 import '../services/api_client.dart';
 import '../services/geo_service.dart';
+import '../services/location_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
 import '../widgets/place_picker.dart';
@@ -417,6 +418,17 @@ class _AddressFormState extends State<_AddressForm> {
 
   late bool _isDefault = widget.existing?.isDefault ?? false;
 
+  /// The pinned door, when there is one.
+  ///
+  /// This is the half of an address a rider can actually navigate to. It stays
+  /// null unless the buyer pins it - never derived from the words, because an
+  /// address like "white house po bahay namin" geocodes somewhere confident
+  /// and wrong.
+  late double? _lat = widget.existing?.lat;
+  late double? _lng = widget.existing?.lng;
+  late String _precision = widget.existing?.precision ?? '';
+  bool _pinning = false;
+
   @override
   void dispose() {
     for (final c in [_label, _fullName, _contact, _line, _notes]) {
@@ -451,9 +463,55 @@ class _AddressFormState extends State<_AddressForm> {
         cityCode: _cityCode,
         province: _province,
         notes: _notes.text.trim(),
+        lat: _lat,
+        lng: _lng,
+        precision: _precision,
         isDefault: _isDefault,
       ),
     );
+  }
+
+  /// Pins the door from the phone's own fix.
+  ///
+  /// Only ever on a tap - the app does not reach for somebody's coordinates on
+  /// its own.
+  Future<void> _pinHere() async {
+    if (_pinning) return;
+    setState(() => _pinning = true);
+
+    final result = await LocationService.instance.currentAddress();
+    if (!mounted) return;
+
+    setState(() => _pinning = false);
+
+    if (!result.isOk || result.lat == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(result.message),
+            action: result.outcome == LocationOutcome.deniedForever
+                ? SnackBarAction(
+                    label: 'Settings',
+                    onPressed: LocationService.instance.openSettings,
+                  )
+                : null,
+          ),
+        );
+      return;
+    }
+
+    setState(() {
+      _lat = result.lat;
+      _lng = result.lng;
+      _precision = 'exact';
+    });
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        const SnackBar(content: Text('Marked where you are standing now.')),
+      );
   }
 
   @override
@@ -585,6 +643,8 @@ class _AddressFormState extends State<_AddressForm> {
                 lines: 2,
               ),
               const SizedBox(height: 16),
+              _pinRow(),
+              const SizedBox(height: 12),
               ClaySunken(
                 child: Row(
                   children: [
@@ -611,6 +671,103 @@ class _AddressFormState extends State<_AddressForm> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// Where this address sits on the map, and how sure we are of it.
+  ///
+  /// The barangay is worked out on the server from the province, city and
+  /// barangay chosen above - nothing has to be tapped for that. The button is
+  /// for the one case a barangay cannot cover: standing at the door and
+  /// marking it exactly.
+  ///
+  /// The difference is spelled out rather than glossed, because "pinned" on
+  /// its own would let a barangay centre pass for somebody's front door.
+  Widget _pinRow() {
+    final exact = _precision == 'exact';
+
+    return ClaySunken(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                exact ? Icons.location_on_rounded : Icons.map_outlined,
+                size: 19,
+                color: exact ? AppColors.primaryMedium : AppColors.textMuted,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      exact ? 'Exact spot marked' : 'Located by barangay',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      exact
+                          ? 'The map points at this exact spot.'
+                          : 'The map points at the barangay you chose above. '
+                              'The rider follows your street and landmark from there.',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        height: 1.4,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _pinning ? null : _pinHere,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                boxShadow: AppShadows.subtle,
+              ),
+              child: _pinning
+                  ? const Center(
+                      child: SizedBox(
+                        height: 14,
+                        width: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppColors.primaryMedium,
+                        ),
+                      ),
+                    )
+                  : Text(
+                      // Named for what it actually does. "Pin here" invited
+                      // somebody ordering from school to mark the school.
+                      exact
+                          ? 'Standing here now? Re-mark the exact spot'
+                          : 'Standing here now? Mark the exact spot',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryMedium,
+                      ),
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }

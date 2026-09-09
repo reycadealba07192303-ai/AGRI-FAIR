@@ -101,6 +101,14 @@ class UserModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Forgets who is signed in, on the way out.
+  void clearAccount() {
+    _account = null;
+    email = '';
+    fullName = '';
+    notifyListeners();
+  }
+
   void updateProfile({
     String? fullName,
     String? contactNumber,

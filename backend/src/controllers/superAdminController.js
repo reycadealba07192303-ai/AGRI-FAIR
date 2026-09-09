@@ -151,7 +151,7 @@ export const reviewSellerCredentialHandler = async (req, res) => {
 
 export const getPendingCredentialsHandler = async (req, res) => {
   try {
-    res.json(await SuperAdminService.getPendingCredentials());
+    res.json(await SuperAdminService.getSellerCredentials());
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

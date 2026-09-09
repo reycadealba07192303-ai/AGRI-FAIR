@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import { findUserByUserId } from '../repositories/userRepository.js';
+import { postOrderSystemMessage } from './chatService.js';
 
 /** Buyer-facing stages, collapsing the seller's finer statuses. */
 export const STAGES = ['pending', 'confirmed', 'preparing', 'delivery', 'delivered'];
@@ -51,6 +52,12 @@ function groupOrders(rows) {
         orderDate: row.orderDate,
         paymentMethod: row.paymentMethod,
         paymentStatus: row.paymentStatus,
+        // The receipt the buyer uploaded. Their own proof, and they should be
+        // able to look at what they sent rather than take it on trust that it
+        // arrived - it is behind the authenticated files route, readable by
+        // the two people on the order and nobody else.
+        paymentProof: row.paymentProof || '',
+        paymentReference: row.paymentReference || '',
         deliveryAddress: row.deliveryAddress,
         customerName: row.customerName,
         customerContact: row.customerContact,
@@ -149,6 +156,16 @@ export const cancelMyOrder = async (buyerUserId, groupId, reason) => {
     row.statusReason = reason.trim();
     row.statusHistory.push({ status: 'cancelled', changedAt: new Date(), reason: reason.trim() });
     await row.save();
+  }
+
+  // One message per seller, not per row: a basket cancelled across three of
+  // their listings is one piece of news to each seller, not three.
+  for (const sellerUserId of new Set(rows.map((r) => r.sellerId))) {
+    await postOrderSystemMessage({
+      sellerUserId,
+      buyerUserId,
+      text: `The buyer cancelled order ${rows[0].orderNumber} - ${reason.trim()}.`,
+    });
   }
 
   return getMyOrder(buyerUserId, groupId);

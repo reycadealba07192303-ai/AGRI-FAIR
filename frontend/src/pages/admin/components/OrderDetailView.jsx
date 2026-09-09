@@ -12,6 +12,8 @@ import {
   ImageIcon,
 } from 'lucide-react';
 import { API_ORIGIN } from '../../../services/authApi';
+import PrivateFileModal from '../../../components/PrivateFileModal';
+import { fetchRiders, assignRider } from '../../../services/riderApi';
 import DeliveryMap from './DeliveryMap';
 import './OrderDetailView.css';
 
@@ -45,6 +47,40 @@ export default function OrderDetailView({
   onTransition,
   onReviewPayment,
 }) {
+  const [proofOpen, setProofOpen] = useState(false);
+  const [riders, setRiders] = useState([]);
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState('');
+  const [assignedTo, setAssignedTo] = useState(order.delivery?.riderUserId ?? '');
+  const [deliveryProofOpen, setDeliveryProofOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchRiders()
+      .then((res) => {
+        if (!cancelled) setRiders(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch(() => {
+        // No delivery people is a normal state, not an error worth shouting
+        // about on an order screen.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function assignTo(value) {
+    setAssigning(true);
+    setAssignError('');
+    try {
+      await assignRider(order._id, value === '' ? null : Number(value));
+      setAssignedTo(value);
+    } catch (err) {
+      setAssignError(err.response?.data?.error || 'Could not assign that person.');
+    } finally {
+      setAssigning(false);
+    }
+  }
   const [rejecting, setRejecting] = useState(false);
   const [rejectNote, setRejectNote] = useState('');
 
@@ -199,15 +235,14 @@ export default function OrderDetailView({
                 )}
 
                 {order.paymentProof && (
-                  <a
+                  <button
                     className="odv-proof"
-                    href={`${API_ORIGIN}${order.paymentProof}`}
-                    target="_blank"
-                    rel="noreferrer"
+                    type="button"
+                    onClick={() => setProofOpen(true)}
                   >
                     <ImageIcon size={15} strokeWidth={2.2} />
                     View the buyer&apos;s proof of payment
-                  </a>
+                  </button>
                 )}
 
                 {awaitingReview && !rejecting && (
@@ -272,6 +307,53 @@ export default function OrderDetailView({
             </section>
 
             <section className="odv-card">
+              <h3>Delivery person</h3>
+              <div className="odv-card-body">
+                {riders.length === 0 ? (
+                  <p className="odv-muted">
+                    You have no delivery people yet. Add one under Delivery, and
+                    they will appear here.
+                  </p>
+                ) : (
+                  <>
+                    <select
+                      className="odv-assign"
+                      value={assignedTo}
+                      disabled={assigning}
+                      onChange={(e) => assignTo(e.target.value)}
+                    >
+                      <option value="">Nobody assigned</option>
+                      {riders
+                        .filter((r) => r.status !== 'suspended')
+                        .map((r) => (
+                          <option key={r.userId} value={r.userId}>
+                            {r.name}
+                            {r.activated ? '' : ' — has not signed in yet'}
+                          </option>
+                        ))}
+                    </select>
+                    <p className="odv-note">
+                      Assigning is what lets them see this order and share the
+                      truck&apos;s position. They see nothing else of yours.
+                    </p>
+                  </>
+                )}
+                {assignError && <p className="ap-form-error">{assignError}</p>}
+
+                {order.delivery?.proofOfDelivery && (
+                  <button
+                    className="odv-proof"
+                    type="button"
+                    onClick={() => setDeliveryProofOpen(true)}
+                  >
+                    <ImageIcon size={15} strokeWidth={2.2} />
+                    View proof of delivery
+                  </button>
+                )}
+              </div>
+            </section>
+
+            <section className="odv-card">
               <h3>Next step</h3>
               <div className="odv-card-body">
                 {actions.length === 0 ? (
@@ -303,6 +385,22 @@ export default function OrderDetailView({
           </aside>
         </div>
       </div>
+
+      {proofOpen && (
+        <PrivateFileModal
+          path={order.paymentProof}
+          title={`Proof of payment — ${order.orderNumber}`}
+          onClose={() => setProofOpen(false)}
+        />
+      )}
+
+      {deliveryProofOpen && (
+        <PrivateFileModal
+          path={order.delivery.proofOfDelivery}
+          title={`Proof of delivery — ${order.orderNumber}`}
+          onClose={() => setDeliveryProofOpen(false)}
+        />
+      )}
     </div>
   );
 }

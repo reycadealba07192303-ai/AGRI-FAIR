@@ -23,6 +23,15 @@ function signToken(user) {
 function toUserResponse(user, extras = {}) {
   return {
     id: user.userId,
+
+    // The same number under the name the rest of the API uses for it.
+    //
+    // `/user/me` returns the raw document, which calls it `userId`, so a client
+    // that reads `user.userId` works after fetching the profile and silently
+    // gets undefined after logging in. That undefined is how a seller ended up
+    // being shown as their own chat partner: "the participant who is not me"
+    // matched nobody, so the first one - themselves - was picked.
+    userId: user.userId,
     name: user.name,
     email: user.email,
     role: user.role,
@@ -358,6 +367,20 @@ export const authService = {
     }
 
     let user = await authRepository.findByEmail(cleanEmail);
+
+    // An account somebody else created and its owner has not finished. The
+    // stored password is random and nobody knows it, so any attempt would come
+    // back "Invalid credentials" - true, and useless. Say what to do instead.
+    if (user && user.passwordSet === false) {
+      const err = new Error(
+        'This account has not been set up yet. Use the code emailed to you to '
+        + 'choose a password.'
+      );
+      err.code = 'ACCOUNT_NOT_ACTIVATED';
+      err.status = 403;
+      throw err;
+    }
+
     let firebaseIdToken = null;
 
     const { session: fbSession, reachable } = await trySignInWithFirebase(cleanEmail, password);

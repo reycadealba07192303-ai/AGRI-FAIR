@@ -3,6 +3,7 @@ import * as cartRepo from '../repositories/cartRepository.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import { findUserByUserId } from '../repositories/userRepository.js';
+import { postOrderSystemMessage } from './chatService.js';
 
 /** Two lines are the same line only if the rice and the sack size both match. */
 const sameLine = (item, productId, weightKg) =>
@@ -159,6 +160,7 @@ export const checkout = async (buyerUserId, {
   deliveryFee = 0,
   paymentProof = '',
   paymentReference = '',
+  addressId = '',
 }) => {
   const cart = await cartRepo.getOrCreate(buyerUserId);
   if (!cart.items.length) throw new Error('Your cart is empty.');
@@ -170,7 +172,37 @@ export const checkout = async (buyerUserId, {
   if (!deliveryAddress?.trim()) throw new Error('Add a delivery address.');
   if (!customerName?.trim()) throw new Error('Add the name for this delivery.');
 
+  // GCash means the money has already moved, so the proof comes with the
+  // order. Enforced here and not only on the checkout screen: the button being
+  // disabled is a courtesy to the buyer, not a rule - anything can post to
+  // this endpoint, and a seller left chasing an unprovable GCash order is the
+  // person who pays for that.
+  if (/gcash/i.test(paymentMethod || '') && !paymentProof) {
+    throw new Error('Upload your GCash receipt before placing this order.');
+  }
+
   const buyer = await findUserByUserId(buyerUserId);
+
+  // Where it is going, as a point. Read from the saved address rather than
+  // trusting coordinates in the request - the client can send any pair of
+  // numbers, and this one has to be the address the buyer actually picked.
+  const chosen = addressId
+    ? (buyer?.addresses || []).find((a) => String(a._id) === String(addressId))
+    : null;
+
+  // One lookup per seller, not per line: a basket of four sacks from one shop
+  // is one pickup point.
+  const sellerIds = [...new Set(view.items.map((line) => line.sellerId))];
+  const pickups = new Map();
+  for (const sellerUserId of sellerIds) {
+    const seller = await findUserByUserId(sellerUserId);
+    pickups.set(sellerUserId, {
+      pickupLat: seller?.pickupLat ?? null,
+      pickupLng: seller?.pickupLng ?? null,
+      pickupAddress: seller?.pickupAddress || '',
+    });
+  }
+
   const groupId = crypto.randomUUID();
   const orderNumber = `AGF-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
 
@@ -188,7 +220,9 @@ export const checkout = async (buyerUserId, {
         ? `${line.name} (${line.weightKg} kg)`
         : line.name,
       unitPrice: line.unitPrice,
+      // Sacks, and how big one is. The two together are the kilograms.
       quantity: line.quantity,
+      weightKg: line.weightKg || 1,
       subtotal: line.lineTotal,
       deliveryFee: fee,
       total: line.lineTotal + fee,
@@ -209,10 +243,44 @@ export const checkout = async (buyerUserId, {
       orderNumber,
       groupId,
       notes: notes?.trim() || '',
+
+      // Fixed now, so editing the address later cannot redirect an order that
+      // is already on the road.
+      route: {
+        ...pickups.get(line.sellerId),
+        dropoffLat: chosen?.lat ?? null,
+        dropoffLng: chosen?.lng ?? null,
+        dropoffPrecision: chosen?.precision || '',
+      },
     }));
   }
 
   await cartRepo.clear(buyerUserId);
+
+  // Tell each seller in their own thread. A basket can span several sellers,
+  // and each of them only ever sees their own rows - so the message is built
+  // per seller rather than one summary of the whole basket.
+  const bySeller = new Map();
+  for (const row of orders) {
+    const lines = bySeller.get(row.sellerId) || [];
+    lines.push(row);
+    bySeller.set(row.sellerId, lines);
+  }
+
+  for (const [sellerUserId, lines] of bySeller) {
+    const items = lines
+      .map((row) => `${row.quantity}x ${row.productName}`)
+      .join(', ');
+    const total = lines.reduce((sum, row) => sum + Number(row.total), 0);
+
+    await postOrderSystemMessage({
+      sellerUserId,
+      buyerUserId,
+      text:
+        `Order ${orderNumber} placed - ${items}. Total P${total.toFixed(2)}, ` +
+        `paid by ${paymentMethod || 'Cash/COD'}. Waiting for the seller to confirm.`,
+    });
+  }
 
   return {
     orderNumber,

@@ -4,7 +4,7 @@ const findConversation = async (participantIds) => {
   // Use $all to ensure both specific MongoDB _ids are present
   return await Conversation.findOne({
     participants: { $all: participantIds, $size: participantIds.length }
-  }).populate('participants', 'name email role userId');
+  }).populate('participants', 'name email role userId avatarUrl');
 };
 
 const createConversation = async (participantIds) => {
@@ -27,8 +27,18 @@ const findConversationById = async (conversationId) => {
 const getUserConversations = async (mongoUserId) => {
   // Use the MongoDB _id here, as the Conversation schema stores ObjectIds
   return await Conversation.find({ participants: mongoUserId })
-    .populate('participants', 'name email role userId')
-    .populate('lastMessage')
+    // avatarUrl so the inbox can draw faces instead of initials.
+    .populate('participants', 'name email role userId avatarUrl')
+    // The last message's sender too: an inbox row reads "You: ..." when the
+    // ball is in the other person's court, and that needs more than an id.
+    .populate({
+      path: 'lastMessage',
+      populate: [
+        { path: 'sender', select: 'userId' },
+        // So a shared listing reads as its name rather than as an empty line.
+        { path: 'product', select: 'name' },
+      ],
+    })
     .sort({ updatedAt: -1 });
 };
 

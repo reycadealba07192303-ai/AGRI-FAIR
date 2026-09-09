@@ -2,7 +2,13 @@ import API from './authApi';
 
 function toProfileFormData(data) {
   const fd = new FormData();
-  ['name', 'email', 'contact', 'bio', 'pickupAddress', 'deliveryOrigin', 'theme'].forEach((key) => {
+  // pickupLat/pickupLng are the point a rider navigates to; pickupAddress is
+  // the words a person reads. Both travel on the same form.
+  [
+    'name', 'email', 'contact', 'bio',
+    'pickupAddress', 'pickupLat', 'pickupLng',
+    'deliveryOrigin', 'theme',
+  ].forEach((key) => {
     if (data[key] !== undefined) fd.append(key, data[key]);
   });
   if (data.payout !== undefined) fd.append('payout', JSON.stringify(data.payout));

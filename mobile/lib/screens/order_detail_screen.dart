@@ -6,6 +6,9 @@ import '../services/api_client.dart';
 import '../services/order_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
+import '../widgets/delivery_map.dart';
+import '../widgets/private_image.dart';
+import 'write_review_screen.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   const OrderDetailScreen({super.key, required this.order});
@@ -135,10 +138,20 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           padding: const EdgeInsets.fromLTRB(18, 8, 18, 32),
           children: [
             _statusCard(),
+
+            // The map goes above the receipt: once the rice is on the road,
+            // where it is matters more than what it cost.
+            ..._trackingSection(),
+
             const SizedBox(height: 16),
             _itemsCard(),
             const SizedBox(height: 16),
             _totalsCard(),
+            ..._reviewSection(),
+            if (_order.hasReceipt) ...[
+              const SizedBox(height: 16),
+              _receiptCard(),
+            ],
             if (_order.deliveryAddress.isNotEmpty) ...[
               const SizedBox(height: 16),
               _deliveryCard(),
@@ -156,6 +169,33 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         ),
       ),
     );
+  }
+
+  /// One map per line, shown once the rice has left the shop.
+  ///
+  /// Per line rather than per order, because a basket split across two sellers
+  /// is two journeys from two different shops - a single map would have to
+  /// pick one of them and be wrong about the other.
+  List<Widget> _trackingSection() {
+    const onTheRoad = {'shipped', 'delivered', 'completed'};
+
+    final tracked = _order.items
+        .where((item) => item.orderId.isNotEmpty && onTheRoad.contains(item.status))
+        .toList();
+
+    if (tracked.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 16),
+      for (final item in tracked) ...[
+        DeliveryMapCard(
+          key: ValueKey(item.orderId),
+          orderId: item.orderId,
+          productName: item.productName,
+        ),
+        const SizedBox(height: 12),
+      ],
+    ];
   }
 
   Widget _statusCard() {
@@ -353,6 +393,140 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ],
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  /// The receipt the buyer sent, on the order it paid for.
+  ///
+  /// Shown to them rather than only to the seller: they are the one who parted
+  /// with the money, and "did my proof actually go through?" is the first
+  /// question a GCash order raises.
+  /// A review invitation per delivered line.
+  ///
+  /// Per line, because a review is written against the order row - that is
+  /// what lets the server check the person actually received this rice, and
+  /// only let them say so once.
+  List<Widget> _reviewSection() {
+    if (_order.status != 'completed') return const [];
+
+    final reviewable =
+        _order.items.where((item) => item.orderId.isNotEmpty).toList();
+    if (reviewable.isEmpty) return const [];
+
+    return [
+      const SizedBox(height: 16),
+      ClayCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'HOW WAS IT?',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Your rating and photos show on the seller\'s product, so the '
+              'next buyer can see what actually arrived.',
+              style: TextStyle(
+                fontSize: 12.5,
+                height: 1.45,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < reviewable.length; i++) ...[
+              if (i > 0) const SizedBox(height: 10),
+              ClayButton(
+                label: reviewable.length == 1
+                    ? 'Write a review'
+                    : 'Review ${reviewable[i].productName}',
+                filled: false,
+                icon: Icons.star_rounded,
+                onPressed: () => _writeReview(reviewable[i]),
+              ),
+            ],
+          ],
+        ),
+      ),
+    ];
+  }
+
+  Future<void> _writeReview(OrderItem item) async {
+    final posted = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => WriteReviewScreen(
+          orderId: item.orderId,
+          productName: item.productName,
+        ),
+      ),
+    );
+
+    // A posted review moves the order out of To Review, so the screen behind
+    // is stale.
+    if (posted == true && mounted) await _refresh();
+  }
+
+  Widget _receiptCard() {
+    return ClayCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text(
+                'YOUR GCASH RECEIPT',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const Spacer(),
+              if (_order.paymentStatus == 'paid')
+                const ClayBadge(
+                  label: 'Confirmed',
+                  color: AppColors.success,
+                  compact: true,
+                )
+              else if (_order.paymentStatus == 'rejected')
+                const ClayBadge(
+                  label: 'Not received',
+                  color: AppColors.error,
+                  compact: true,
+                )
+              else
+                const ClayBadge(label: 'Waiting on seller', compact: true),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GestureDetector(
+            onTap: () => showPrivateImage(
+              context,
+              path: _order.paymentProof,
+              title: 'Your GCash receipt',
+            ),
+            child: PrivateImage(
+              path: _order.paymentProof,
+              height: 150,
+              width: double.infinity,
+              radius: AppRadius.md,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            _order.paymentReference.isEmpty
+                ? 'Tap to see it full size.'
+                : 'Reference ${_order.paymentReference}. Tap to see it full size.',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
         ],
       ),
     );

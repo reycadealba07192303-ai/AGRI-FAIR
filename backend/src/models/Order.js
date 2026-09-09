@@ -1,5 +1,14 @@
 import mongoose from 'mongoose';
 
+/**
+ * The kilograms one order line takes off the shelf.
+ *
+ * Stock is kept in kilograms and an order is counted in sacks, so every place
+ * that moves stock has to go through here rather than reaching for `quantity`.
+ */
+export const stockUnits = (order) =>
+  Number(order?.quantity || 0) * Number(order?.weightKg || 1);
+
 export const ORDER_STATUSES = [
   'pending',
   'confirmed',
@@ -36,10 +45,31 @@ const orderSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  /**
+   * How many sacks - not kilograms.
+   *
+   * The pair below is the whole unit story: `quantity` counts sacks and
+   * `weightKg` says how big one is, so the kilograms that leave the shelf are
+   * the two multiplied. Reading `quantity` as kilograms is what made an order
+   * for one 25 kg sack take a single kilo out of stock.
+   */
   quantity: {
     type: Number,
     required: true,
     min: 1,
+  },
+
+  /**
+   * The size of one sack on this line: 1, 5, 25, 50 kg.
+   *
+   * Defaults to 1 so a manually typed order, and every order placed before
+   * this field existed, still counts as plain kilograms.
+   */
+  weightKg: {
+    type: Number,
+    required: true,
+    min: 1,
+    default: 1,
   },
   subtotal: {
     type: Number,
@@ -93,7 +123,33 @@ const orderSchema = new mongoose.Schema({
    * pushes a position; the buyer and the seller both read it. Coordinates are
    * kept only while the order is in transit and cleared on completion.
    */
+  /**
+   * The two fixed ends of the journey, taken at checkout.
+   *
+   * Snapshotted rather than looked up later: a buyer who edits or deletes the
+   * address after ordering must not move an order that is already on the road.
+   * `delivery` below is the part that moves; this is the part that does not.
+   */
+  route: {
+    pickupLat: { type: Number, default: null },
+    pickupLng: { type: Number, default: null },
+    pickupAddress: { type: String, trim: true, default: '' },
+    dropoffLat: { type: Number, default: null },
+    dropoffLng: { type: Number, default: null },
+    /** 'exact' when the buyer pinned their door, 'approximate' for a barangay. */
+    dropoffPrecision: { type: String, enum: ['', 'exact', 'approximate'], default: '' },
+  },
+
   delivery: {
+    /**
+     * The rider carrying this line, when the seller has assigned one.
+     *
+     * Assignment is what grants access: a rider may read and update only the
+     * orders their number is on, and nothing else the seller can see.
+     */
+    riderUserId: { type: Number, default: null },
+    assignedAt: { type: Date },
+
     courierName: { type: String, trim: true, default: '' },
     courierContact: { type: String, trim: true, default: '' },
     lat: { type: Number, default: null },
@@ -101,6 +157,17 @@ const orderSchema = new mongoose.Schema({
     updatedAt: { type: Date },
     etaMinutes: { type: Number, default: null },
     isLive: { type: Boolean, default: false },
+
+    /**
+     * The photo taken at the door, per order line.
+     *
+     * Per line and not per basket: two sacks from two sellers arrive on two
+     * journeys, and "delivered" has to be provable for each of them
+     * separately. Private, like a receipt - the buyer's doorway is on it.
+     */
+    proofOfDelivery: { type: String, default: '' },
+    deliveredAt: { type: Date },
+    deliveryNote: { type: String, trim: true, default: '' },
   },
 
   paymentStatus: {

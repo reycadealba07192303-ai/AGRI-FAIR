@@ -2,6 +2,8 @@ import * as adminRepo from '../repositories/adminRepository.js';
 import * as orderRepo from '../repositories/orderRepository.js';
 import * as inventoryRepo from '../repositories/inventoryRepository.js';
 import * as notificationRepo from '../repositories/notificationRepository.js';
+import { postOrderSystemMessage } from './chatService.js';
+import { stockUnits } from '../models/Order.js';
 
 // Valid next-statuses per current status (Orders module status flow).
 const STATUS_TRANSITIONS = {
@@ -209,6 +211,25 @@ export const getMyCustomers = async (sellerId) => {
   return await orderRepo.getDistinctCustomersForSeller(sellerId);
 };
 
+/**
+ * What a status change says out loud.
+ *
+ * Written for the buyer, not the database: "shipped" on its own tells them
+ * nothing about what to do next.
+ */
+const STATUS_SENTENCE = (orderNumber, status, reason) => {
+  const sentences = {
+    confirmed: `Order ${orderNumber} is confirmed. The seller is preparing it now.`,
+    processing: `Order ${orderNumber} is being packed.`,
+    shipped: `Order ${orderNumber} is on the way. Please keep your phone reachable for the rider.`,
+    delivered: `Order ${orderNumber} was delivered. Tell the seller if anything is wrong with it.`,
+    completed: `Order ${orderNumber} is complete. You can leave a review now.`,
+    cancelled: `Order ${orderNumber} was cancelled${reason ? ` - ${reason}` : ''}.`,
+  };
+
+  return sentences[status] || `Order ${orderNumber} is now ${status}.`;
+};
+
 export const updateOrderStatus = async (orderId, sellerId, status, reason) => {
   const order = await orderRepo.findOrderById(orderId);
   if (!order) {
@@ -227,9 +248,13 @@ export const updateOrderStatus = async (orderId, sellerId, status, reason) => {
     throw new Error('A reason is required to cancel an order.');
   }
 
+  // Kilograms, not sacks. Stock is kept in kilograms and an order is counted
+  // in sacks, so one 25 kg sack used to take a single kilo off the shelf.
+  const kilos = stockUnits(order);
+
   // Deduct stock the moment an order is confirmed (not while merely pending).
   if (status === 'confirmed' && !order.stockDeducted) {
-    const updated = await adminRepo.decrementStock(order.productId, order.quantity);
+    const updated = await adminRepo.decrementStock(order.productId, kilos);
     if (!updated) {
       throw new Error('Not enough stock to confirm this order.');
     }
@@ -238,10 +263,11 @@ export const updateOrderStatus = async (orderId, sellerId, status, reason) => {
       productId: order.productId,
       productName: order.productName,
       type: 'SALE',
-      quantity: -order.quantity,
+      quantity: -kilos,
       resultingStock: updated.stock,
       note: `Order ${order.orderNumber} confirmed`,
     });
+    // Sacks, deliberately: "8 sold" reads as eight bags, not eight kilos.
     await adminRepo.bumpSoldCount(order.productId, order.quantity);
     order.stockDeducted = true;
     await maybeNotifyLowStock(sellerId, { _id: order.productId });
@@ -250,14 +276,14 @@ export const updateOrderStatus = async (orderId, sellerId, status, reason) => {
   // Restock if cancelling an order that had already taken stock out.
   if (status === 'cancelled' && order.stockDeducted) {
     await adminRepo.bumpSoldCount(order.productId, -order.quantity);
-    const updated = await adminRepo.incrementStock(order.productId, order.quantity);
+    const updated = await adminRepo.incrementStock(order.productId, kilos);
     if (updated) {
       await inventoryRepo.logMovement({
         sellerId,
         productId: order.productId,
         productName: order.productName,
         type: 'RETURN',
-        quantity: order.quantity,
+        quantity: kilos,
         resultingStock: updated.stock,
         note: `Order ${order.orderNumber} cancelled`,
       });
@@ -279,6 +305,17 @@ export const updateOrderStatus = async (orderId, sellerId, status, reason) => {
     body: reason || `Status updated to ${status}.`,
     link: `/client?tab=Orders&order=${order._id}`,
   });
+
+  // And in the thread, where the buyer is already asking about it. Only for
+  // storefront orders: one typed in by the seller has no buyer account behind
+  // it and so nobody to tell.
+  if (order.buyerUserId) {
+    await postOrderSystemMessage({
+      sellerUserId: sellerId,
+      buyerUserId: order.buyerUserId,
+      text: STATUS_SENTENCE(order.orderNumber, status, reason),
+    });
+  }
 
   return updatedOrder;
 };

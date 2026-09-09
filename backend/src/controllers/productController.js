@@ -10,7 +10,9 @@ export const getAllProducts = async (req, res, next) => {
       // mobile app's wording keeps working.
       variety: req.query.variety || req.query.category,
       status: req.query.status,
-      search: req.query.search
+      search: req.query.search,
+      // Opt-in, for the seller's own screens. A buyer never asks for this.
+      includeSoldOut: req.query.includeSoldOut === 'true',
     };
 
     const result = await productService.getAllProducts(page, limit, filters);
@@ -85,7 +87,9 @@ export const deleteProduct = async (req, res, next) => {
 export const getProductsByCategory = async (req, res, next) => {
   try {
     const { category } = req.params;
-    const products = await productService.getProductsByCategory(category);
+    const products = await productService.getProductsByCategory(category, {
+      includeSoldOut: req.query.includeSoldOut === 'true',
+    });
 
     res.json({
       success: true,
@@ -160,7 +164,9 @@ export const searchProducts = async (req, res, next) => {
       });
     }
 
-    const products = await productService.searchProducts(q);
+    const products = await productService.searchProducts(q, {
+      includeSoldOut: req.query.includeSoldOut === 'true',
+    });
 
     res.json({
       success: true,

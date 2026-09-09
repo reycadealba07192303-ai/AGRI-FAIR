@@ -22,7 +22,7 @@ for (const dir of [PUBLIC_DIR, PRIVATE_DIR]) {
  * which is never served statically. They are only readable through the
  * authenticated /api/files route, which checks who is asking.
  */
-const PRIVATE_FIELDS = new Set(['paymentQr', 'document', 'paymentProof']);
+const PRIVATE_FIELDS = new Set(['paymentQr', 'document', 'paymentProof', 'proof']);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

@@ -23,10 +23,19 @@ enum LocationOutcome {
 }
 
 class LocationResult {
-  const LocationResult(this.outcome, {this.address = ''});
+  const LocationResult(this.outcome, {this.address = '', this.lat, this.lng});
 
   final LocationOutcome outcome;
   final String address;
+
+  /// The fix itself.
+  ///
+  /// The words are for the person reading them; these are what a rider
+  /// navigates to. Keeping only the words - which is what this used to do -
+  /// threw away the accurate half of a location the buyer had just granted
+  /// permission for.
+  final double? lat;
+  final double? lng;
 
   bool get isOk => outcome == LocationOutcome.ok && address.isNotEmpty;
 
@@ -101,7 +110,12 @@ class LocationService {
         return const LocationResult(LocationOutcome.unavailable);
       }
 
-      return LocationResult(LocationOutcome.ok, address: address);
+      return LocationResult(
+        LocationOutcome.ok,
+        address: address,
+        lat: position.latitude,
+        lng: position.longitude,
+      );
     } catch (_) {
       // Reverse geocoding needs the network. A fix without a name is not much
       // use as a delivery address, so this reports the same as no fix.

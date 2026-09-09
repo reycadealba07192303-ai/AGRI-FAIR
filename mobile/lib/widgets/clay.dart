@@ -77,12 +77,14 @@ class ClaySunken extends StatelessWidget {
         color: color,
         borderRadius: BorderRadius.circular(radius),
         // Inner shadows are not a thing in Flutter's BoxDecoration, so the
-        // recess is faked: a darker fill plus a hairline of light along the
-        // bottom edge, which is where a pressed dent would catch the light.
-        border: const Border(
-          bottom: BorderSide(color: Color(0x66FFFFFF), width: 1.5),
-          right: BorderSide(color: Color(0x33FFFFFF), width: 1),
-        ),
+        // recess is faked: a darker fill inside a hairline of light, which is
+        // what a pressed dent catches around its rim.
+        //
+        // The hairline has to be uniform. A Border with different sides cannot
+        // be painted with a borderRadius - Flutter asserts "the following is
+        // not uniform" and paints nothing at all, which is why every sunken
+        // panel in the app was coming out flat.
+        border: Border.all(color: const Color(0x55FFFFFF), width: 1.2),
       ),
       child: child,
     );
@@ -164,13 +166,21 @@ class _ClayButtonState extends State<ClayButton> {
                     Icon(widget.icon, size: 18, color: foreground),
                     const SizedBox(width: 9),
                   ],
-                  Text(
-                    widget.label,
-                    style: TextStyle(
-                      color: foreground,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.1,
+                  // Flexible, so a long label shortens instead of running off
+                  // the edge. A button whose words do not fit is the black and
+                  // yellow stripe people photograph and send you.
+                  Flexible(
+                    child: Text(
+                      widget.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: foreground,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.1,
+                      ),
                     ),
                   ),
                 ],

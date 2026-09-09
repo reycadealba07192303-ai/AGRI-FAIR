@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -9,10 +8,10 @@ import '../models/address.dart';
 import '../models/cart.dart';
 import '../services/address_service.dart';
 import '../services/api_client.dart';
-import '../services/api_config.dart';
 import '../services/checkout_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
+import '../widgets/private_image.dart';
 import 'addresses_screen.dart';
 import 'order_success_screen.dart';
 
@@ -45,6 +44,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
     _loadDefaultAddress();
+
+    // The order is built from the server's cart, so this screen reads it again
+    // rather than trusting whatever the app happened to be holding - a stale
+    // copy is how an order ends up priced on rice that has since sold out.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) CartModel.of(context).refresh();
+    });
   }
 
   @override
@@ -134,6 +140,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool get _canPlace {
     if (_address == null || _placing) return false;
 
+    // Nothing to buy: the server would refuse this anyway, and refusing it
+    // here says so before the person taps.
+    final cart = CartModel.of(context);
+    if (!cart.isLoaded || cart.items.isEmpty) return false;
+
     // GCash without a receipt leaves the seller nothing to check, so the
     // button stays disabled rather than creating an order they must chase.
     if (_method == PaymentMethod.gcash && _receipt == null) return false;
@@ -162,6 +173,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         deliveryFee: cart.deliveryFee,
         receiptPath: _receipt?.path,
         paymentReference: _referenceController.text.trim(),
+        addressId: address.id,
       );
 
       if (!mounted) return;
@@ -367,8 +379,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             const SizedBox(width: 10),
             Expanded(
               child: Text(
-                payment?.reason ??
-                    'This seller has not set up online payment yet.',
+                // Empty, not null, is what actually arrives when the server
+                // sends no reason - and `??` does not catch an empty string,
+                // which left this box blank with nothing to explain it.
+                (payment?.reason ?? '').isEmpty
+                    ? 'This seller has not set up online payment yet. '
+                        'Choose Cash on Delivery instead.'
+                    : payment!.reason,
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.textBody,
@@ -397,7 +414,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (payment.hasQr) ...[
-              _QrImage(path: payment.qrImage),
+              GestureDetector(
+                // A QR is scanned from another phone, so it has to be able to
+                // get bigger than a 108px thumbnail.
+                onTap: () => showPrivateImage(
+                  context,
+                  path: payment.qrImage,
+                  title: 'GCash QR for ${payment.sellerName}',
+                ),
+                child: PrivateImage(
+                  path: payment.qrImage,
+                  height: 108,
+                  width: 108,
+                  fallbackIcon: Icons.qr_code_2_rounded,
+                ),
+              ),
               const SizedBox(width: 14),
             ],
             Expanded(
@@ -636,6 +667,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Why the Place Order button is off, in the order the person hits them.
+  String _reasonCannotPlace(CartModel cart) {
+    if (!cart.isLoaded) return 'Loading your cart…';
+    if (cart.items.isEmpty) return 'Your cart is empty — add rice to continue';
+    if (_address == null) return 'Add a delivery address to continue';
+    return 'Attach your GCash receipt to continue';
+  }
+
   Widget _placeBar(CartModel cart) {
     return Container(
       padding: const EdgeInsets.fromLTRB(18, 14, 18, 16),
@@ -659,9 +698,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             // dead control and guessing.
             if (!_canPlace && !_placing) ...[
               Text(
-                _address == null
-                    ? 'Add a delivery address to continue'
-                    : 'Attach your GCash receipt to continue',
+                _reasonCannotPlace(cart),
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.textMuted,
@@ -743,47 +780,6 @@ class _MethodRow extends StatelessWidget {
 }
 
 /// The seller's QR, loaded from the authenticated files route.
-class _QrImage extends StatelessWidget {
-  const _QrImage({required this.path});
-
-  final String path;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<Map<String, String>>(
-      future: ApiClient.instance.imageHeaders(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const ClaySkeleton(height: 108, width: 108);
-        }
-
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-          child: CachedNetworkImage(
-            imageUrl: ApiConfig.mediaUrl(path),
-            httpHeaders: snapshot.data,
-            height: 108,
-            width: 108,
-            fit: BoxFit.cover,
-            errorWidget: (_, _, _) => Container(
-              height: 108,
-              width: 108,
-              color: AppColors.surfaceSunken,
-              child: const Icon(
-                Icons.qr_code_2_rounded,
-                size: 34,
-                color: AppColors.textMuted,
-              ),
-            ),
-            placeholder: (_, _) => const ClaySkeleton(height: 108, width: 108),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// A dashed drop target for the receipt.
 class DottedPanel extends StatelessWidget {
   const DottedPanel({super.key, required this.child});
 

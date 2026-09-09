@@ -11,7 +11,7 @@ import { protect, authorizeRoles } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.use(protect);
-router.use(authorizeRoles('superadmin', 'seller', 'buyer'));
+router.use(authorizeRoles('superadmin', 'seller', 'buyer', 'rider'));
 
 // GET /api/chat/conversations
 router.get('/conversations', getUserConversationsList);

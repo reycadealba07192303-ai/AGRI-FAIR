@@ -36,6 +36,7 @@ class CheckoutService {
     String notes = '',
     String? receiptPath,
     String paymentReference = '',
+    String addressId = '',
   }) async {
     final body = await _api.postMultipart(
       '/cart/checkout',
@@ -49,6 +50,10 @@ class CheckoutService {
         'deliveryFee': deliveryFee.toStringAsFixed(0),
         if (notes.isNotEmpty) 'notes': notes,
         if (paymentReference.isNotEmpty) 'paymentReference': paymentReference,
+        // The id, not the coordinates: the server reads the pin off the saved
+        // address itself, so a client cannot send an order somewhere the buyer
+        // never chose.
+        if (addressId.isNotEmpty) 'addressId': addressId,
       },
     );
 

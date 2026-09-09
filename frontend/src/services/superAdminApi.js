@@ -12,3 +12,17 @@ export const fetchAuditLogs = (params) => API.get('/superadmin/audit-logs', { pa
 export const fetchUserAnalytics = (id) => API.get(`/superadmin/users/${id}/analytics`);
 export const fetchPlatformRevenue = () => API.get('/superadmin/analytics/revenue');
 export const fetchBusinessAnalytics = () => API.get('/superadmin/analytics/businesses');
+
+// --- Seller credential review ---
+// Every seller who has submitted a payout account or a document, decided or
+// not. An approval that disappears cannot be checked later, or taken back.
+export const fetchSellerCredentials = () => API.get('/superadmin/credentials');
+
+/**
+ * Approves or rejects one credential.
+ *
+ * `body` is { kind: 'payout' | 'document', docType?, approve, reason? }. A
+ * rejection needs a reason - the seller has to know what to fix.
+ */
+export const reviewCredential = (id, body) =>
+  API.put(`/superadmin/users/${id}/credentials`, body);

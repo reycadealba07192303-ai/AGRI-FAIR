@@ -50,11 +50,36 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  /**
+   * `rider` is created by a seller, not by signing up.
+   *
+   * They deliver for that seller and see nothing else: only the orders
+   * assigned to them, and only while assigned. `employedBy` below is what ties
+   * them to the seller who took them on.
+   */
   role: {
     type: String,
-    enum: ['superadmin', 'seller', 'buyer'],
+    enum: ['superadmin', 'seller', 'buyer', 'rider'],
     default: 'buyer'
   },
+
+  /**
+   * For a rider: the seller who added them.
+   *
+   * Null for everybody else. A rider belongs to one seller - a delivery person
+   * hired by one shop has no business seeing another shop's orders.
+   */
+  employedBy: { type: Number, default: null },
+
+  /**
+   * Whether this account has a password its owner chose.
+   *
+   * A rider's account is created by their seller with a random one they are
+   * never told, so it stays false until they activate the account with the
+   * emailed code. Sign-in is refused until then - otherwise an account exists
+   * that nobody can get into and nobody can tell why.
+   */
+  passwordSet: { type: Boolean, default: true },
   status: {
     type: String,
     enum: ['active', 'suspended', 'pending'],
@@ -135,6 +160,17 @@ const userSchema = new mongoose.Schema({
   pickupAddress: { type: String, trim: true, default: '' },
 
   /**
+   * Where the rice is actually collected, as a point on the map.
+   *
+   * The written pickup address is what a person reads; these are what a rider
+   * navigates to. Kept null until the seller sets them, because a guessed
+   * coordinate sends somebody to the wrong barangay with more confidence than
+   * no coordinate at all.
+   */
+  pickupLat: { type: Number, default: null },
+  pickupLng: { type: Number, default: null },
+
+  /**
    * Where a buyer wants their rice delivered. A list rather than one field:
    * people order to a home and a workplace, and retyping the whole thing at
    * every checkout is how a wrong address gets entered.
@@ -159,6 +195,32 @@ const userSchema = new mongoose.Schema({
      */
     provinceCode: { type: String, trim: true, default: '' },
     cityCode: { type: String, trim: true, default: '' },
+    /**
+     * The door itself, when the buyer has pinned it.
+     *
+     * Null is the normal state for an address that was typed rather than
+     * pinned - and it stays null rather than being geocoded from the text,
+     * because "white house po bahay namin" geocodes to somewhere confident
+     * and wrong.
+     */
+    lat: { type: Number, default: null },
+    lng: { type: Number, default: null },
+
+    /**
+     * How good that point is.
+     *
+     * `exact` is the buyer standing at their own door and pinning it.
+     * `approximate` is the barangay, looked up from the province, city and
+     * barangay they chose - right part of the right town, not the door. The
+     * difference is shown wherever the pin is, so nobody navigates to a
+     * barangay centre believing it is a house.
+     */
+    precision: {
+      type: String,
+      enum: ['', 'exact', 'approximate'],
+      default: '',
+    },
+
     // "Green gate beside the sari-sari store" - what actually gets a rider
     // to the door.
     notes: { type: String, trim: true, default: '' },

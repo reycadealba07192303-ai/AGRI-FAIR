@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../models/chat_model.dart';
+import '../services/api_client.dart';
+import '../services/chat_service.dart';
 import '../theme/app_theme.dart';
 import 'chat_screen.dart';
 import 'home_screen.dart';
@@ -24,11 +25,27 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late int _tab = widget.initialTab;
+  int _unread = 0;
+
+  /// Reaches the Messages tab, which an IndexedStack builds once and then
+  /// keeps - so it has to be told when to look again.
+  final _chatKey = GlobalKey<ChatScreenState>();
+  final _profileKey = GlobalKey<ProfileScreenState>();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUnread();
+  }
 
   static const _tabs = [
     _TabSpec(Icons.home_rounded, Icons.home_outlined, 'Home'),
     _TabSpec(Icons.storefront_rounded, Icons.storefront_outlined, 'Shop'),
-    _TabSpec(Icons.forum_rounded, Icons.forum_outlined, 'Messages'),
+    _TabSpec(
+      Icons.chat_bubble_rounded,
+      Icons.chat_bubble_outline_rounded,
+      'Messages',
+    ),
     _TabSpec(Icons.person_rounded, Icons.person_outline_rounded, 'Profile'),
   ];
 
@@ -40,11 +57,11 @@ class _MainScreenState extends State<MainScreen> {
       // rebuilding the catalog every time Home is tapped refetches for nothing.
       body: IndexedStack(
         index: _tab,
-        children: const [
-          HomeScreen(),
-          ShopScreen(),
-          ChatScreen(),
-          ProfileScreen(),
+        children: [
+          const HomeScreen(),
+          const ShopScreen(),
+          ChatScreen(key: _chatKey),
+          ProfileScreen(key: _profileKey),
         ],
       ),
       bottomNavigationBar: _navBar(),
@@ -75,8 +92,23 @@ class _MainScreenState extends State<MainScreen> {
                   child: _NavItem(
                     spec: _tabs[i],
                     selected: _tab == i,
-                    badge: i == 2 ? _unreadCount(context) : 0,
-                    onTap: () => setState(() => _tab = i),
+                    badge: i == 2 ? _unread : 0,
+                    onTap: () {
+                      setState(() => _tab = i);
+
+                      if (i == 2) {
+                        // Opening Messages: read it again. The screen was
+                        // built at launch and has not looked since.
+                        _chatKey.currentState?.reload();
+                      } else {
+                        // Leaving Messages is when the count has most likely
+                        // just changed.
+                        _loadUnread();
+                        if (i == 3) {
+                          _profileKey.currentState?.reloadStats();
+                        }
+                      }
+                    },
                   ),
                 ),
             ],
@@ -86,13 +118,18 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
-  int _unreadCount(BuildContext context) {
+  /// Refreshed when the tab bar is built rather than polled: opening the app
+  /// or coming back to it is when the number matters, and a chat app that
+  /// polls in the background is a battery complaint waiting to happen.
+  Future<void> _loadUnread() async {
     try {
-      return ChatModel.of(context).unreadCount;
-    } catch (_) {
-      // The chat model is still local. A missing count must not take the whole
-      // navigation bar down with it.
-      return 0;
+      final conversations = await ChatService.instance.conversations();
+      if (!mounted) return;
+
+      final total = conversations.fold<int>(0, (sum, c) => sum + c.unreadCount);
+      if (total != _unread) setState(() => _unread = total);
+    } on ApiException {
+      // A badge is not worth an error on screen.
     }
   }
 }

@@ -303,11 +303,12 @@
   font-size: 1.05rem;
   font-weight: 600;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   box-shadow: 0 8px 24px rgba(26, 46, 26, 0.25);
+  text-decoration: none;
 }
 
 .lp-btn-primary:hover {
@@ -694,6 +695,29 @@
   margin-top: 2rem;
 }
 
+.lp-about-text .lp-btn-howto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0 0 1rem;
+  padding: 1rem 1.6rem;
+  border-radius: 100px;
+  border: 1.5px solid rgba(18, 33, 18, 0.18);
+  background: transparent;
+  color: var(--green-900);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.25s ease;
+}
+
+.lp-about-text .lp-btn-howto:hover {
+  border-color: var(--green-700);
+  background: rgba(18, 33, 18, 0.04);
+  transform: translateY(-2px);
+}
+
 .lp-about-visual {
   flex: 1;
   display: flex;
@@ -784,7 +808,381 @@
   background: var(--green-900);
 }
 
-/* --- CTA --- */
+/* --- HOW TO USE — vertical journey --- */
+.lp-howto {
+  padding: 2rem 2rem 1rem;
+}
+
+.lp-howto-shell {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: center;
+  padding: clamp(2.5rem, 5vw, 4rem);
+  border-radius: 36px;
+  background:
+    radial-gradient(ellipse 70% 60% at 0% 0%, rgba(201, 168, 76, 0.22), transparent 55%),
+    radial-gradient(ellipse 55% 50% at 100% 100%, rgba(125, 191, 125, 0.18), transparent 50%),
+    linear-gradient(145deg, #0f1d10 0%, #1a2e1a 48%, #243f28 100%);
+  box-shadow: 0 28px 70px rgba(18, 33, 18, 0.25);
+  overflow: hidden;
+}
+
+.lp-howto-intro {
+  max-width: 420px;
+}
+
+.lp-howto-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 1rem;
+}
+
+.lp-howto-intro h2 {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(2.1rem, 4vw, 2.9rem);
+  font-weight: 700;
+  color: var(--white);
+  margin: 0 0 1rem;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+}
+
+.lp-howto-intro h2 em {
+  font-style: italic;
+  font-weight: 300;
+  color: var(--gold-light);
+}
+
+.lp-howto-intro p {
+  margin: 0 0 1.75rem;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.lp-howto-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.lp-howto-rail-item {
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 1.1rem;
+  align-items: stretch;
+}
+
+.lp-howto-rail-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.lp-howto-rail-marker > span:first-child {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-family: 'Fraunces', serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--green-900);
+  background: var(--white);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.lp-howto-rail-line {
+  flex: 1;
+  width: 2px;
+  min-height: 36px;
+  margin: 8px 0 4px;
+  background: linear-gradient(180deg, var(--gold), rgba(201, 168, 76, 0.2));
+  border-radius: 99px;
+}
+
+.lp-howto-rail-copy {
+  padding: 0.45rem 0 1.65rem;
+}
+
+.lp-howto-rail-item:last-child .lp-howto-rail-copy {
+  padding-bottom: 0.35rem;
+}
+
+.lp-howto-rail-copy h3 {
+  margin: 0.4rem 0 0.4rem;
+  font-size: 1.18rem;
+  font-weight: 700;
+  color: var(--white);
+  letter-spacing: -0.02em;
+}
+
+.lp-howto-rail-copy p {
+  margin: 0;
+  font-size: 0.96rem;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+  max-width: 36ch;
+}
+
+/* --- DOWNLOAD --- */
+.lp-download {
+  padding: 2.5rem 1rem 4.5rem;
+  overflow: visible;
+}
+
+.lp-download-row {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+}
+
+.lp-download-visual {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  min-width: 0;
+  max-width: 720px;
+}
+
+.lp-download-phones {
+  width: 118%;
+  max-width: none;
+  height: auto;
+  display: block;
+  margin-right: 0;
+  filter: drop-shadow(0 28px 48px rgba(18, 33, 18, 0.2));
+  animation: lp-download-float 6s ease-in-out infinite;
+}
+
+.lp-download-copy {
+  flex: 0 0 auto;
+  width: 22rem;
+  max-width: 22rem;
+  margin-left: -4.5rem;
+  position: relative;
+  z-index: 2;
+}
+
+.lp-download-kicker {
+  margin: 0 0 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--green-700);
+}
+
+.lp-download-title {
+  font-family: 'Fraunces', serif;
+  font-size: clamp(2.6rem, 5vw, 3.6rem);
+  font-weight: 700;
+  color: var(--green-900);
+  margin: 0 0 1.15rem;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.lp-download-title span {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--green-800);
+}
+
+.lp-download-sub {
+  margin: 0 0 2rem;
+  font-size: 1.05rem;
+  line-height: 1.7;
+  color: var(--text-mid);
+  max-width: 34ch;
+}
+
+.lp-download-btn {
+  appearance: none;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 11rem;
+  padding: 1.05rem 2.1rem;
+  border-radius: 999px;
+  background: var(--green-900);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  box-shadow: 0 14px 32px rgba(18, 33, 18, 0.22);
+  transition: transform 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+}
+
+.lp-download-btn:hover {
+  background: var(--green-800);
+  transform: translateY(-2px);
+  box-shadow: 0 18px 36px rgba(18, 33, 18, 0.28);
+}
+
+@keyframes lp-download-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+/* Download modal */
+.lp-dl-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background: rgba(12, 20, 12, 0.55);
+  backdrop-filter: blur(6px);
+  animation: lp-dl-fade 0.2s ease;
+}
+
+.lp-dl-modal-card {
+  position: relative;
+  width: min(100%, 400px);
+  padding: 2rem 1.75rem 1.65rem;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(0, 0, 0, 0.28);
+  text-align: center;
+  animation: lp-dl-rise 0.28s ease;
+}
+
+.lp-dl-modal-close {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.75rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-mid);
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.lp-dl-modal-close:hover {
+  color: var(--green-900);
+  background: rgba(18, 33, 18, 0.06);
+}
+
+.lp-dl-modal-card h3 {
+  margin: 0 0 0.45rem;
+  font-family: 'Fraunces', serif;
+  font-size: 1.55rem;
+  color: var(--green-900);
+  letter-spacing: -0.02em;
+}
+
+.lp-dl-modal-hint {
+  margin: 0 0 1.25rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  color: var(--text-mid);
+}
+
+.lp-dl-modal-qr {
+  width: 200px;
+  height: 200px;
+  display: block;
+  margin: 0 auto 1.15rem;
+  border-radius: 14px;
+  background: #fff;
+  border: 1px solid rgba(18, 33, 18, 0.08);
+  padding: 8px;
+}
+
+.lp-dl-modal-linkbox {
+  margin-bottom: 1.1rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  background: #f3f5f0;
+  border: 1px solid rgba(18, 33, 18, 0.08);
+  text-align: left;
+  overflow: hidden;
+}
+
+.lp-dl-modal-linkbox code {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--green-900);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.lp-dl-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.lp-dl-modal-open,
+.lp-dl-modal-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.85rem 0.9rem;
+  border-radius: 999px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+}
+
+.lp-dl-modal-open {
+  background: var(--green-900);
+  color: #fff;
+}
+
+.lp-dl-modal-open:hover {
+  background: var(--green-800);
+}
+
+.lp-dl-modal-copy {
+  background: #fff;
+  color: var(--green-900);
+  border: 1.5px solid rgba(18, 33, 18, 0.18);
+}
+
+.lp-dl-modal-copy:hover {
+  border-color: var(--green-700);
+  background: #f7f9f5;
+}
+
+@keyframes lp-dl-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes lp-dl-rise {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- CTA (legacy aliases kept for blob reuse) --- */
 .lp-cta {
   background: var(--green-900);
   padding: 6rem 2rem;
@@ -836,11 +1234,12 @@
   font-size: 1.05rem;
   font-weight: 600;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 0.75rem;
   transition: all 0.3s ease;
   box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  text-decoration: none;
 }
 
 .lp-btn-white:hover {
@@ -954,12 +1353,64 @@
   .lp-stat-divider { display: none; }
   .lp-about-inner { flex-direction: column; gap: 4rem; text-align: center; }
   .lp-about-card-offset { margin-left: 0; }
+  .lp-howto-shell { grid-template-columns: 1fr; gap: 2.5rem; padding: 2.75rem 1.75rem; }
+  .lp-howto-intro { max-width: none; text-align: center; }
+  .lp-howto-intro .lp-btn-white { margin-left: auto; margin-right: auto; }
+  .lp-howto-rail-copy p { max-width: none; }
+  .lp-download-row {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.75rem;
+  }
+  .lp-download-visual {
+    justify-content: center;
+    width: min(100vw, 780px);
+    flex: none;
+    margin-inline: auto;
+  }
+  .lp-download-copy {
+    width: auto;
+    max-width: 28rem;
+    margin: 0 auto;
+  }
+  .lp-download-sub {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .lp-download-phones {
+    width: 112%;
+    margin-right: 0;
+    margin-left: -6%;
+  }
 }
 
 @media (max-width: 768px) {
   .lp-features-grid { grid-template-columns: repeat(2, 1fr); }
-  .lp-nav-links a:not(.lp-nav-cta) { display: none; }
+  .lp-nav-links a[href="#video"] { display: none; }
+  .lp-nav-links a[href="#features"],
+  .lp-nav-links a[href="#about"] { display: none; }
   .lp-cta { margin: 2rem 1rem 4rem; padding: 4rem 1.5rem; border-radius: 24px; }
+  .lp-howto { padding: 1rem 1rem 0; }
+  .lp-howto-shell { border-radius: 24px; }
+  .lp-download {
+    padding: 2rem 0 3rem;
+    overflow-x: clip;
+  }
+  .lp-download-row {
+    gap: 0.5rem;
+    padding: 0 1.15rem;
+  }
+  .lp-download-visual {
+    width: 100vw;
+    max-width: none;
+    margin-inline: calc(50% - 50vw);
+  }
+  .lp-download-phones {
+    width: 125%;
+    margin-left: -12.5%;
+    margin-right: 0;
+  }
+  .lp-about-text .lp-btn-howto { margin-left: 0; display: inline-flex; }
   .lp-footer-top, .lp-footer-bottom { flex-direction: column; gap: 1.5rem; text-align: center; }
 }
 

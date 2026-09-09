@@ -6,19 +6,21 @@ import {
   ShoppingCart,
   BarChart3,
   MessageSquare,
+  Truck,
   UserCog,
   X,
   LogOut,
 } from 'lucide-react';
 import logoImg from '../../../assets/logo.png';
 
-const DEFAULT_TABS = ['Dashboard', 'Products', 'Inventory', 'Orders', 'Analytics', 'Messages', 'Account Info'];
+const DEFAULT_TABS = ['Dashboard', 'Products', 'Inventory', 'Orders', 'Delivery', 'Analytics', 'Messages', 'Account Info'];
 
 const TAB_ICONS = {
   Dashboard: LayoutGrid,
   Products: Package,
   Inventory: ClipboardList,
   Orders: ShoppingCart,
+  Delivery: Truck,
   Analytics: BarChart3,
   Messages: MessageSquare,
   'Account Info': UserCog,

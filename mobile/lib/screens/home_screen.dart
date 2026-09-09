@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/cart.dart';
+import '../models/notification_model.dart';
 import '../models/product.dart';
 import '../models/user_model.dart';
 import '../services/api_client.dart';
@@ -39,6 +40,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _load();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      NotificationModel.of(context).load();
+    });
   }
 
   Future<void> _load() async {
@@ -235,12 +240,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 10),
-          ClayIconButton(
-            icon: Icons.notifications_none_rounded,
-            size: 42,
-            onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-            ),
+          AnimatedBuilder(
+            animation: NotificationModel.of(context),
+            builder: (context, _) {
+              final unread = NotificationModel.of(context).unreadCount;
+              return ClayIconButton(
+                icon: Icons.notifications_none_rounded,
+                size: 42,
+                badge: unread,
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const NotificationsScreen(),
+                    ),
+                  );
+                  if (context.mounted) {
+                    NotificationModel.of(context).load();
+                  }
+                },
+              );
+            },
           ),
           const SizedBox(width: 8),
           AnimatedBuilder(

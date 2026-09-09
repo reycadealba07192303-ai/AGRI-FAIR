@@ -141,3 +141,29 @@ export const verifyEmailOtp = async (req, res) => {
     return fail(res, 400, err, 'Could not verify that code');
   }
 };
+
+/**
+ * Step one for a delivery person: confirms the account exists and emails the
+ * code, so the app knows whether to offer the create-password step.
+ */
+export const startDeliverySetup = async (req, res) => {
+  try {
+    const result = await emailVerificationService.startDeliverySetup(req.body);
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    return fail(res, 400, err, 'Could not find that delivery account');
+  }
+};
+
+/**
+ * Finishes an account created by somebody else - a rider's, made by their
+ * seller. One call: the code proves the address, the password is set.
+ */
+export const activateAccount = async (req, res) => {
+  try {
+    const result = await emailVerificationService.activateAccount(req.body);
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    return fail(res, 400, err, 'Could not set up this account');
+  }
+};

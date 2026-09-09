@@ -3,15 +3,15 @@ import User from '../models/User.js';
 
 const sendChatMessage = async (req, res) => {
   try {
-    const { receiverUserId, text } = req.body;
+    const { receiverUserId, text, productId } = req.body;
     const senderUserId = req.user.userId;
     const mediaUrl = req.file ? `/uploads/media/${req.file.filename}` : undefined;
 
-    if (!receiverUserId || (!text && !mediaUrl)) {
-      return res.status(400).json({ message: 'Receiver numeric userId and either text or media are required.' });
+    if (!receiverUserId || (!text && !mediaUrl && !productId)) {
+      return res.status(400).json({ message: 'Receiver numeric userId and either text, media or a product are required.' });
     }
 
-    const message = await sendMessageByUserId(senderUserId, receiverUserId, text, mediaUrl);
+    const message = await sendMessageByUserId(senderUserId, receiverUserId, text, mediaUrl, { productId });
     res.status(201).json(message);
   } catch (error) {
     res.status(400).json({ message: error.message });

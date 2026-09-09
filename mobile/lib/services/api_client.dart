@@ -27,6 +27,12 @@ class ApiException implements Exception {
   bool get isUnauthorized => statusCode == 401;
   bool get isEmailNotVerified => code == 'EMAIL_NOT_VERIFIED';
 
+  /// An account a seller created whose owner has not claimed it yet.
+  ///
+  /// Not a wrong password - there is no password anybody knows. The screen
+  /// sends them to set one rather than leaving them retyping.
+  bool get isNotActivated => code == 'ACCOUNT_NOT_ACTIVATED';
+
   @override
   String toString() => message;
 }
@@ -154,6 +160,7 @@ class ApiClient {
     String path, {
     Map<String, String> fields = const {},
     String? filePath,
+    List<String> filePaths = const [],
     String fileField = 'file',
   }) async {
     return _send(() async {
@@ -161,9 +168,12 @@ class ApiClient {
         ..headers.addAll(await _headers(json: false))
         ..fields.addAll(fields);
 
-      if (filePath != null && filePath.isNotEmpty) {
+      // One file or several, under the same field name - a review carries up
+      // to four photos, a receipt carries one.
+      for (final path in [?filePath, ...filePaths]) {
+        if (path.isEmpty) continue;
         request.files.add(
-          await http.MultipartFile.fromPath(fileField, filePath),
+          await http.MultipartFile.fromPath(fileField, path),
         );
       }
 

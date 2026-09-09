@@ -1,4 +1,4 @@
-import Product from '../models/Product.js';
+import Product, { STOREFRONT_FILTER } from '../models/Product.js';
 import User from '../models/User.js';
 import { findUserByUserIdSafe } from '../repositories/userRepository.js';
 import { getRatingSummary, getRatingMapForSellers } from '../repositories/reviewRepository.js';
@@ -60,13 +60,17 @@ export const sellerService = {
 
     const [rating, products] = await Promise.all([
       getRatingSummary({ sellerId: userId }),
-      Product.find({ createdBy: userId, status: 'active' }).select('soldCount'),
+      Product.find({ createdBy: userId, status: 'active' }).select('soldCount stock'),
     ]);
 
     return toPublicProfile(user, {
       averageRating: rating.average ? Math.round(rating.average * 10) / 10 : 0,
       reviewCount: rating.count || 0,
-      productCount: products.length,
+      // Counts what is actually on the shelf, so the number matches the list
+      // the buyer is about to scroll.
+      productCount: products.filter((p) => (p.stock || 0) > 0).length,
+      // Sales are counted over everything ever listed - selling out is what
+      // earns the number, so it must not take it away.
       totalSold: products.reduce((sum, p) => sum + (p.soldCount || 0), 0),
     });
   },
@@ -80,7 +84,7 @@ export const sellerService = {
     // One grouped query rather than a lookup per seller - a directory of
     // twenty shops would otherwise be twenty-one round trips.
     const counts = await Product.aggregate([
-      { $match: { status: 'active' } },
+      { $match: { ...STOREFRONT_FILTER } },
       {
         $group: {
           _id: '$createdBy',
@@ -149,13 +153,29 @@ export const sellerService = {
     const payout = user.payout || {};
 
     if (payout.status !== 'verified') {
+      // Which of the three it is matters. "Not set up" told a seller who had
+      // submitted their GCash and was waiting on a Super Admin that they had
+      // done nothing - and told the buyer the same, so neither knew the
+      // account was one approval away from working.
+      const reasons = {
+        pending:
+          "This seller's GCash is waiting for Super Admin approval. "
+          + 'Choose Cash on Delivery for now.',
+        rejected:
+          "This seller's online payment was not approved. "
+          + 'Choose Cash on Delivery.',
+      };
+
       return {
         sellerId: userId,
         sellerName: user.sellerProfile?.businessName || user.name,
         available: false,
+        payoutStatus: payout.status || 'unset',
         // Said plainly, because the app has to offer cash on delivery instead
         // rather than showing an empty QR box.
-        reason: 'This seller has not set up online payment yet.',
+        reason:
+          reasons[payout.status]
+          || 'This seller has not set up online payment yet. Choose Cash on Delivery.',
       };
     }
 
@@ -171,11 +191,14 @@ export const sellerService = {
     };
   },
 
-  /** Only active listings - a buyer browsing a shop should not meet hidden ones. */
+  /**
+   * Only what can be bought - a buyer browsing a shop should meet neither
+   * hidden listings nor sold-out ones.
+   */
   async getPublicProducts(userId) {
     if (!Number.isFinite(userId)) throw new Error('Invalid seller id');
 
-    return Product.find({ createdBy: userId, status: 'active' }).sort({
+    return Product.find({ createdBy: userId, ...STOREFRONT_FILTER }).sort({
       createdAt: -1,
     });
   },

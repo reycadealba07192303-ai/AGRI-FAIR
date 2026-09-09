@@ -53,25 +53,65 @@
   background: #eae7dd;
 }
 
-/* Courier pin, drawn in CSS so no marker image has to resolve through the bundler. */
+/* Pins, drawn in CSS so no marker image has to resolve through the bundler. */
 .dm-pin {
   width: 20px;
   height: 20px;
   border-radius: 50%;
-  background: var(--g700);
   border: 3px solid #fff;
-  box-shadow: 0 0 0 2px rgba(45, 90, 45, 0.35), 0 4px 10px rgba(18, 33, 18, 0.3);
+  box-shadow: 0 4px 10px rgba(18, 33, 18, 0.3);
+}
+
+/* Only the rider pulses — the two ends are not going anywhere. */
+.dm-pin--rider {
+  background: #C0483A;
+  box-shadow: 0 0 0 2px rgba(192, 72, 58, 0.35), 0 4px 10px rgba(18, 33, 18, 0.3);
   animation: dm-pulse 2s ease-out infinite;
 }
 
+.dm-pin--shop { background: #1B3829; }
+.dm-pin--door { background: #C9A96E; }
+
 @keyframes dm-pulse {
-  0%   { box-shadow: 0 0 0 2px rgba(45, 90, 45, 0.35), 0 4px 10px rgba(18, 33, 18, 0.3); }
-  70%  { box-shadow: 0 0 0 14px rgba(45, 90, 45, 0), 0 4px 10px rgba(18, 33, 18, 0.3); }
-  100% { box-shadow: 0 0 0 2px rgba(45, 90, 45, 0), 0 4px 10px rgba(18, 33, 18, 0.3); }
+  0%   { box-shadow: 0 0 0 2px rgba(192, 72, 58, 0.35), 0 4px 10px rgba(18, 33, 18, 0.3); }
+  70%  { box-shadow: 0 0 0 14px rgba(192, 72, 58, 0), 0 4px 10px rgba(18, 33, 18, 0.3); }
+  100% { box-shadow: 0 0 0 2px rgba(192, 72, 58, 0), 0 4px 10px rgba(18, 33, 18, 0.3); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dm-pin { animation: none; }
+  .dm-pin--rider { animation: none; }
+}
+
+.dm-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+/* The two ends in words, under the map. The pin says where; this says what. */
+.dm-legs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft, #4b5a4f);
+}
+
+.dm-leg { display: inline-flex; align-items: center; gap: 0.4rem; }
+.dm-leg svg { flex-shrink: 0; opacity: 0.7; }
+
+.dm-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dm-dot--shop { background: #1B3829; }
+.dm-dot--door { background: #C9A96E; }
+
+/* Says which end is missing — that is the part somebody can go and fix. */
+.dm-gap {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: #8a6d3b;
 }
 
 .dm-meta {
@@ -106,4 +146,13 @@
   background: linear-gradient(90deg, rgba(18, 33, 18, 0.06) 25%, rgba(18, 33, 18, 0.11) 37%, rgba(18, 33, 18, 0.06) 63%);
   background-size: 400% 100%;
   animation: ap-shimmer 1.3s ease infinite;
+}
+
+/* A barangay pin is an area, and saying so keeps a rider from trusting it as
+   a doorstep. */
+.dm-approx {
+  margin-left: 1.15rem;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #8a6d3b;
 }

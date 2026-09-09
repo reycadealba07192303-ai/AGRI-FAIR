@@ -26,6 +26,42 @@ class WeightTier {
       (pricePerKg * weightKg * (1 - discountPercent / 100)).roundToDouble();
 }
 
+/// The sack sizes rice is sold in across the Philippines.
+///
+/// Every one of these is shown on every product, whether or not the seller
+/// offers it, because a buyer looking for a 5 kg bag needs to see that it is
+/// not sold here - an absent option is indistinguishable from an option that
+/// was never scrolled to.
+const List<double> kStandardWeightsKg = [1, 2, 5, 10, 25, 50];
+
+/// One weight as the buyer meets it: its price, and whether it can be bought.
+///
+/// Two separate things stop a size being buyable, and they need different
+/// words. The seller may not sell that size at all, or they may sell it and
+/// have run too low - "only 10 kg left" makes 25 kg and 50 kg unbuyable even
+/// though both are on the list.
+class WeightOption {
+  const WeightOption({
+    required this.tier,
+    required this.price,
+    required this.offered,
+    required this.inStock,
+  });
+
+  final WeightTier tier;
+  final double price;
+  final bool offered;
+  final bool inStock;
+
+  bool get available => offered && inStock;
+  double get weightKg => tier.weightKg;
+  String get label => tier.label;
+
+  String get unavailableReason => offered
+      ? 'Not enough stock left for this size'
+      : 'This seller does not sell this size';
+}
+
 /// The seller as the product screen needs them: enough for a card, not the
 /// whole profile. Tapping the card loads the rest from /sellers/:id.
 class ProductSeller {
@@ -111,6 +147,38 @@ class Product {
 
   double priceFor(WeightTier tier) => tier.priceFrom(pricePerKg);
   double get startingPrice => pricePerKg.roundToDouble();
+
+  /// Every standard size, plus anything non-standard the seller added, in
+  /// ascending order - each marked with whether it can actually be bought.
+  ///
+  /// The seller's own tier is used where there is one, so their bulk discount
+  /// is applied; the rest are priced straight off the per-kilo rate, which is
+  /// what they would cost if the seller did sell them.
+  List<WeightOption> get weightOptions {
+    final offered = {for (final t in sellableTiers) t.weightKg: t};
+    final weights = {...kStandardWeightsKg, ...offered.keys}.toList()..sort();
+
+    return [
+      for (final kg in weights)
+        WeightOption(
+          tier: offered[kg] ?? WeightTier(weightKg: kg, discountPercent: 0),
+          price: priceFor(offered[kg] ?? WeightTier(weightKg: kg, discountPercent: 0)),
+          offered: offered.containsKey(kg),
+          // Stock is kept in kilograms, so one sack of this size has to fit
+          // inside what is left.
+          inStock: stock >= kg,
+        ),
+    ];
+  }
+
+  /// The cheapest size somebody can actually put in a basket, or null when the
+  /// seller has nothing left that fits any size they sell.
+  WeightOption? get firstAvailableOption {
+    for (final option in weightOptions) {
+      if (option.available) return option;
+    }
+    return null;
+  }
 
   factory Product.fromJson(Map<String, dynamic> json) {
     final rawSeller = json['seller'];

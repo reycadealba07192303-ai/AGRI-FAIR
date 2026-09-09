@@ -7,7 +7,7 @@ import '../services/api_client.dart';
 import '../services/seller_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/clay.dart';
-import 'chat_screen.dart';
+import 'conversation_screen.dart';
 import 'product_detail_screen.dart';
 
 /// Two ways through the same shelf.
@@ -305,9 +305,20 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                   icon: Icons.chat_bubble_rounded,
                   label: 'Chat',
                   filled: true,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const ChatScreen()),
-                  ),
+                  // Straight into a thread with this seller, whether or not
+                  // the two have ever spoken - the server creates it on the
+                  // first message.
+                  onTap: profile == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ConversationScreen(
+                                otherUserId: profile.id,
+                                otherName: profile.displayName,
+                                otherAvatarUrl: profile.avatarUrl,
+                              ),
+                            ),
+                          ),
                 ),
               ),
               const SizedBox(width: 10),

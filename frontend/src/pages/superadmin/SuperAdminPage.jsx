@@ -13,6 +13,7 @@ import {
   Menu,
   X,
   ScrollText,
+  BadgeCheck,
   Eye,
   Pencil,
   Trash2,
@@ -36,6 +37,7 @@ import {
   fetchPlatformRevenue,
 } from '../../services/superAdminApi';
 import AuditLogPanel from './AuditLogPanel';
+import CredentialsPanel from './CredentialsPanel';
 import BusinessAnalytics from './BusinessAnalytics';
 import SettingsPanel from './SettingsPanel';
 import RowActionsMenu from './RowActionsMenu';
@@ -46,6 +48,7 @@ import { exportToCsv } from '../../utils/csv';
 const TABS = [
   { id: 'Overview', icon: LayoutGrid, label: 'Overview' },
   { id: 'UserManagement', icon: Users, label: 'User Management' },
+  { id: 'Credentials', icon: BadgeCheck, label: 'Credentials' },
   { id: 'AuditLogs', icon: ScrollText, label: 'Audit Logs' },
   { id: 'Analytics', icon: BarChart3, label: 'Analytics' },
   { id: 'Settings', icon: SettingsIcon, label: 'Settings' },
@@ -628,6 +631,9 @@ export default function SuperAdminPage({ onLogout }) {
             </section>
           </div>
         );
+
+      case 'Credentials':
+        return <CredentialsPanel />;
 
       case 'AuditLogs':
         return (

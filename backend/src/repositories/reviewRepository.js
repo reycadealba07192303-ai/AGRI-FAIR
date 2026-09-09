@@ -1,5 +1,21 @@
+import mongoose from 'mongoose';
 import Review from '../models/Review.js';
 import Order from '../models/Order.js';
+
+/**
+ * An aggregate's $match is not cast by mongoose the way a find() is.
+ *
+ * `productId` arrives from the URL as a string, and a string never matches a
+ * stored ObjectId inside an aggregate - silently, with no error. Every
+ * product's rating therefore came back as zero stars from no reviews, even
+ * with reviews sitting right there in `reviews`.
+ */
+const castMatch = (match = {}) => {
+  if (typeof match.productId !== 'string') return match;
+  if (!mongoose.Types.ObjectId.isValid(match.productId)) return match;
+
+  return { ...match, productId: new mongoose.Types.ObjectId(match.productId) };
+};
 
 export const createReview = async (data) => Review.create(data);
 
@@ -56,13 +72,15 @@ export const getRatingMapForSellers = async (sellerIds) => {
 };
 
 export const getRatingSummary = async (match) => {
+  const on = { ...castMatch(match), hidden: false };
+
   const [totals] = await Review.aggregate([
-    { $match: { ...match, hidden: false } },
+    { $match: on },
     { $group: { _id: null, average: { $avg: '$rating' }, count: { $sum: 1 } } },
   ]);
 
   const spread = await Review.aggregate([
-    { $match: { ...match, hidden: false } },
+    { $match: on },
     { $group: { _id: '$rating', count: { $sum: 1 } } },
   ]);
 

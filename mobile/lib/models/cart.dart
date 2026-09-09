@@ -18,12 +18,20 @@ class CartModel extends ChangeNotifier {
 
   ServerCart _cart = ServerCart.empty;
   bool _loading = false;
+  bool _loaded = false;
   String? _error;
 
   ServerCart get cart => _cart;
   List<ServerCartItem> get items => _cart.items;
   bool get isLoading => _loading;
   String? get error => _error;
+
+  /// Whether the server has actually answered at least once.
+  ///
+  /// Without this, a cart that failed to load and a cart that is genuinely
+  /// empty look identical - and the screen told people their cart was empty
+  /// when it had simply never managed to read it.
+  bool get isLoaded => _loaded;
 
   /// Sacks, not kilograms - what the badge on the cart icon counts.
   int get totalCount => _cart.sackCount;
@@ -45,6 +53,7 @@ class CartModel extends ChangeNotifier {
     try {
       _cart = await CartService.instance.fetch();
       _error = null;
+      _loaded = true;
     } on ApiException catch (err) {
       _error = err.message;
     }
@@ -58,6 +67,7 @@ class CartModel extends ChangeNotifier {
   void forget() {
     _cart = ServerCart.empty;
     _error = null;
+    _loaded = false;
     notifyListeners();
   }
 
@@ -68,6 +78,7 @@ class CartModel extends ChangeNotifier {
     try {
       _cart = await action();
       _error = null;
+      _loaded = true;
     } finally {
       _loading = false;
       notifyListeners();

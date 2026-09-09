@@ -11,10 +11,11 @@ import InventoryTab from './tabs/InventoryTab';
 import OrdersTab from './tabs/OrdersTab';
 import ReportsTab from './tabs/ReportsTab';
 import MessagesTab from './tabs/MessagesTab';
+import DeliveryPeopleTab from './tabs/DeliveryPeopleTab';
 import AccountInfoTab from './tabs/AccountInfoTab';
 import { clearSession, getSessionUser } from '../../utils/auth';
 
-const TABS = ['Dashboard', 'Products', 'Inventory', 'Orders', 'Analytics', 'Messages', 'Account Info'];
+const TABS = ['Dashboard', 'Products', 'Inventory', 'Orders', 'Delivery', 'Analytics', 'Messages', 'Account Info'];
 
 export default function AdminPage({ onLogout }) {
   const navigate = useNavigate();
@@ -46,6 +47,8 @@ export default function AdminPage({ onLogout }) {
         return <InventoryTab />;
       case 'Orders':
         return <OrdersTab />;
+      case 'Delivery':
+        return <DeliveryPeopleTab />;
       case 'Analytics':
         return <ReportsTab />;
       case 'Messages':

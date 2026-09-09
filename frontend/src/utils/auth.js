@@ -2,6 +2,7 @@
 export function getHomePath(role) {
   if (role === 'superadmin') return '/superadmin';
   if (role === 'seller') return '/client';
+  if (role === 'rider') return '/rider';
   return '/';
 }
 

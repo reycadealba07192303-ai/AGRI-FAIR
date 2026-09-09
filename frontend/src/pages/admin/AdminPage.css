@@ -2056,3 +2056,51 @@
   cursor: pointer;
 }
 
+
+/* An order speaking for itself, across the middle of the thread. Deliberately
+   not a bubble: it is neither person's words. */
+.ap-msg-system {
+  display: flex;
+  justify-content: center;
+  margin: 0.55rem 0;
+}
+
+.ap-msg-system span {
+  max-width: 78%;
+  padding: 0.45rem 0.8rem;
+  border-radius: 0.7rem;
+  background: rgba(74, 124, 89, 0.12);
+  color: #3d4b42;
+  font-size: 0.76rem;
+  font-weight: 600;
+  line-height: 1.45;
+  text-align: center;
+}
+
+/* A listing passed across, inside a bubble. */
+.ap-msg-product {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.6rem;
+  margin-bottom: 0.35rem;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.ap-msg-product strong { font-size: 0.8rem; }
+.ap-msg-product span { font-size: 0.72rem; opacity: 0.8; }
+
+/* The photo itself, capped so one picture cannot take over the thread. */
+.ap-msg-photo {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.ap-msg-photo img {
+  display: block;
+  max-width: 220px;
+  max-height: 240px;
+  border-radius: 0.5rem;
+  object-fit: cover;
+}

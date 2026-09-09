@@ -43,6 +43,8 @@ enum OrderStage {
 
 class OrderItem {
   const OrderItem({
+    required this.orderId,
+    required this.sellerId,
     required this.productId,
     required this.productName,
     required this.quantity,
@@ -51,6 +53,14 @@ class OrderItem {
     required this.status,
     this.image = '',
   });
+
+  /// This row's own id on the server.
+  ///
+  /// A basket is one order to the buyer but one row per line underneath, and
+  /// delivery is tracked per row - each seller drives their own part of it
+  /// from their own shop.
+  final String orderId;
+  final int sellerId;
 
   final String productId;
   final String productName;
@@ -64,11 +74,15 @@ class OrderItem {
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
     return OrderItem(
+      orderId: (json['orderId'] ?? '').toString(),
+      sellerId: (json['sellerId'] as num?)?.toInt() ?? 0,
       productId: (json['productId'] ?? '').toString(),
       productName: (json['productName'] ?? '').toString(),
       quantity: (json['quantity'] as num?)?.toInt() ?? 0,
       unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0,
-      subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
+      // The buyer's order rows call this `lineTotal`; reading only `subtotal`
+      // found nothing and every item priced itself at zero.
+      subtotal: ((json['lineTotal'] ?? json['subtotal']) as num?)?.toDouble() ?? 0,
       status: (json['status'] ?? 'pending').toString(),
       image: (json['image'] ?? json['productImage'] ?? '').toString(),
     );
@@ -87,6 +101,9 @@ class OrderGroup {
     required this.canCancel,
     this.deliveryFee = 0,
     this.paymentMethod = '',
+    this.paymentStatus = '',
+    this.paymentProof = '',
+    this.paymentReference = '',
     this.deliveryAddress = '',
     this.orderDate,
   });
@@ -102,6 +119,15 @@ class OrderGroup {
   final bool canCancel;
   final double deliveryFee;
   final String paymentMethod;
+  final String paymentStatus;
+
+  /// The GCash receipt the buyer uploaded, behind the authenticated files
+  /// route. Empty for cash on delivery, and for a GCash order placed before
+  /// receipts were required.
+  final String paymentProof;
+  final String paymentReference;
+
+  bool get hasReceipt => paymentProof.isNotEmpty;
   final String deliveryAddress;
   final DateTime? orderDate;
 
@@ -144,6 +170,9 @@ class OrderGroup {
       canCancel: json['canCancel'] == true,
       deliveryFee: (json['deliveryFee'] as num?)?.toDouble() ?? 0,
       paymentMethod: (json['paymentMethod'] ?? '').toString(),
+      paymentStatus: (json['paymentStatus'] ?? '').toString(),
+      paymentProof: (json['paymentProof'] ?? '').toString(),
+      paymentReference: (json['paymentReference'] ?? '').toString(),
       deliveryAddress: (json['deliveryAddress'] ?? '').toString(),
       orderDate: DateTime.tryParse((json['orderDate'] ?? '').toString()),
     );

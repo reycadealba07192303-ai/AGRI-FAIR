@@ -1,18 +1,77 @@
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import '../models/user_model.dart';
+
 import '../models/cart.dart';
+import '../models/user_model.dart';
+import '../services/api_client.dart';
+import '../services/order_service.dart';
 import '../theme/app_theme.dart';
-import 'sign_in_screen.dart';
-import 'edit_profile_screen.dart';
-import 'change_password_screen.dart';
-
+import '../widgets/clay.dart';
 import 'addresses_screen.dart';
+import 'change_password_screen.dart';
+import 'info_screens.dart';
 import 'orders_screen.dart';
+import 'sign_in_screen.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => ProfileScreenState();
+}
+
+class ProfileScreenState extends State<ProfileScreen> {
+  int _orderCount = 0;
+  double _totalSpent = 0;
+  int _memberSinceYear = DateTime.now().year;
+  bool _loadingStats = true;
+
+  @override
+  void initState() {
+    super.initState();
+    reloadStats();
+  }
+
+  /// Refreshed when the Profile tab is opened — same idea as Messages.
+  Future<void> reloadStats() async {
+    try {
+      final orders = await OrderService.instance.myOrders();
+      // Cancelled checkouts never left the wallet.
+      final spent = orders
+          .where((o) => o.status != 'cancelled')
+          .fold<double>(0, (sum, o) => sum + o.total);
+
+      var year = DateTime.now().year;
+      for (final order in orders) {
+        final dated = order.orderDate;
+        if (dated != null && dated.year < year) year = dated.year;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _orderCount = orders.length;
+        _totalSpent = spent;
+        _memberSinceYear = year;
+        _loadingStats = false;
+      });
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => _loadingStats = false);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _loadingStats = false);
+    }
+  }
+
+  Future<void> _openOrders() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const OrdersScreen()),
+    );
+    if (mounted) reloadStats();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,81 +80,90 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              _ProfileHeader(user: user),
-              const SizedBox(height: 16),
-              _buildSection('Account Information', [
-                _MenuItem(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Edit Personal Information',
-                  subtitle: 'Name, contact, address, GCash',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const EditProfileScreen()),
+        child: RefreshIndicator(
+          color: AppColors.primaryMedium,
+          onRefresh: reloadStats,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
+            child: Column(
+              children: [
+                _ProfileHeader(
+                  user: user,
+                  orderCount: _orderCount,
+                  totalSpent: _totalSpent,
+                  memberSinceYear: _memberSinceYear,
+                  loadingStats: _loadingStats,
+                ),
+                const SizedBox(height: 8),
+                _buildSection('Account Information', [
+                  _MenuItem(
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Change Password',
+                    subtitle: 'Send a reset link to your email',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ChangePasswordScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                _MenuItem(
-                  icon: Icons.lock_outline_rounded,
-                  label: 'Change Password',
-                  subtitle: 'Update your account password',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ChangePasswordScreen()),
+                ]),
+                _buildSection('My Orders', [
+                  _MenuItem(
+                    icon: Icons.receipt_long_outlined,
+                    label: 'My Orders',
+                    subtitle: 'To pay, to ship, to receive, to review',
+                    onTap: _openOrders,
                   ),
-                ),
-              ]),
-              _buildSection('My Orders', [
-                _MenuItem(
-                  icon: Icons.receipt_long_outlined,
-                  label: 'My Orders',
-                  subtitle: 'To pay, to ship, to receive, to review',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const OrdersScreen()),
+                  _MenuItem(
+                    icon: Icons.location_on_outlined,
+                    label: 'My Addresses',
+                    subtitle: 'Where your orders are delivered',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AddressesScreen(),
+                      ),
+                    ),
                   ),
-                ),
-                _MenuItem(
-                  icon: Icons.location_on_outlined,
-                  label: 'My Addresses',
-                  subtitle: 'Where your orders are delivered',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const AddressesScreen()),
+                ]),
+                _buildSection('Support', [
+                  _MenuItem(
+                    icon: Icons.policy_outlined,
+                    label: 'Policy & Privacy',
+                    subtitle: 'How AgriFair uses your information',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const PolicyPrivacyScreen(),
+                      ),
+                    ),
                   ),
-                ),
-              ]),
-              _buildSection('Saved Information', [
-                _InfoTile(
-                  icon: Icons.phone_outlined,
-                  label: 'Contact Number',
-                  value: user.contactNumber.isEmpty
-                      ? 'Not set'
-                      : user.contactNumber,
-                ),
-                _InfoTile(
-                  icon: Icons.location_on_outlined,
-                  label: 'Address',
-                  value: user.deliveryAddress.isEmpty
-                      ? 'Not set'
-                      : user.deliveryAddress,
-                ),
-              ]),
-              _buildSection('Account', [
-                _MenuItem(
-                  icon: Icons.logout_rounded,
-                  label: 'Sign Out',
-                  subtitle: user.email,
-                  iconColor: AppColors.error,
-                  labelColor: AppColors.error,
-                  onTap: () => _handleSignOut(context),
-                ),
-              ]),
-              const SizedBox(height: 32),
-            ],
+                  _MenuItem(
+                    icon: Icons.info_outline_rounded,
+                    label: 'About System',
+                    subtitle: 'What this app is and how it works',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AboutSystemScreen(),
+                      ),
+                    ),
+                  ),
+                ]),
+                _buildSection('Account', [
+                  _MenuItem(
+                    icon: Icons.logout_rounded,
+                    label: 'Sign Out',
+                    subtitle: user.email,
+                    iconColor: AppColors.error,
+                    labelColor: AppColors.error,
+                    onTap: () => _handleSignOut(context),
+                  ),
+                ]),
+              ],
+            ),
           ),
         ),
       ),
@@ -104,12 +172,12 @@ class ProfileScreen extends StatelessWidget {
 
   static Widget _buildSection(String title, List<Widget> children) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
+            padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
             child: Text(
               title.toUpperCase(),
               style: const TextStyle(
@@ -120,22 +188,21 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.border),
-            ),
+          ClayCard(
+            padding: EdgeInsets.zero,
+            radius: AppRadius.lg,
+            shadows: AppShadows.subtle,
             child: Column(
               children: [
                 for (int i = 0; i < children.length; i++) ...[
                   children[i],
                   if (i < children.length - 1)
                     const Divider(
-                        height: 1,
-                        color: AppColors.border,
-                        indent: 16,
-                        endIndent: 16),
+                      height: 1,
+                      color: Color(0xFFD7DED4),
+                      indent: 70,
+                      endIndent: 16,
+                    ),
                 ],
               ],
             ),
@@ -150,8 +217,9 @@ class ProfileScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.xl),
+        ),
         title: const Text(
           'Sign Out',
           style: TextStyle(
@@ -167,8 +235,10 @@ class ProfileScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel',
-                style: TextStyle(color: AppColors.textMuted)),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppColors.textMuted),
+            ),
           ),
           ElevatedButton(
             onPressed: () {
@@ -183,12 +253,15 @@ class ProfileScreen extends StatelessWidget {
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(50)),
               elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
             ),
-            child: const Text('Sign Out',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+            child: const Text(
+              'Sign Out',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
         ],
       ),
@@ -200,51 +273,65 @@ class ProfileScreen extends StatelessWidget {
 
 class _ProfileHeader extends StatelessWidget {
   final UserModel user;
-  const _ProfileHeader({required this.user});
+  final int orderCount;
+  final double totalSpent;
+  final int memberSinceYear;
+  final bool loadingStats;
+
+  const _ProfileHeader({
+    required this.user,
+    required this.orderCount,
+    required this.totalSpent,
+    required this.memberSinceYear,
+    required this.loadingStats,
+  });
+
+  static String _formatSpent(double amount) {
+    final whole = amount == amount.roundToDouble();
+    final digits = whole ? amount.toInt().toString() : amount.toStringAsFixed(2);
+    final parts = digits.split('.');
+    final buffer = StringBuffer();
+    final chars = parts[0].split('').reversed.toList();
+    for (var i = 0; i < chars.length; i++) {
+      if (i > 0 && i % 3 == 0) buffer.write(',');
+      buffer.write(chars[i]);
+    }
+    final grouped = buffer.toString().split('').reversed.join();
+    if (parts.length > 1) return '₱$grouped.${parts[1]}';
+    return '₱$grouped';
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.surface,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
       child: Column(
         children: [
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                const Text(
-                  'My Profile',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ],
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'My Profile',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textDark,
+                letterSpacing: -0.6,
+              ),
             ),
           ),
           const SizedBox(height: 22),
           GestureDetector(
             onTap: () => _showAvatarSheet(context, user),
             child: Stack(
+              clipBehavior: Clip.none,
               children: [
                 Container(
-                  width: 92,
-                  height: 92,
+                  width: 96,
+                  height: 96,
                   decoration: BoxDecoration(
                     color: AppColors.primaryDark,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.surface, width: 3),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppColors.primaryDark.withValues(alpha: 0.18),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+                    boxShadow: AppShadows.raised,
                   ),
                   child: ClipOval(
                     child: user.profileImagePath.isNotEmpty
@@ -258,26 +345,34 @@ class _ProfileHeader extends StatelessWidget {
                   ),
                 ),
                 Positioned(
-                  bottom: 0,
-                  right: 0,
+                  bottom: 2,
+                  right: 2,
                   child: Container(
-                    width: 30,
-                    height: 30,
+                    width: 32,
+                    height: 32,
                     decoration: BoxDecoration(
                       color: AppColors.accent,
                       shape: BoxShape.circle,
-                      border: Border.all(color: AppColors.surface, width: 2.5),
+                      border: Border.all(
+                        color: AppColors.background,
+                        width: 3,
+                      ),
+                      boxShadow: AppShadows.subtle,
                     ),
-                    child: const Icon(Icons.camera_alt_rounded,
-                        size: 14, color: Colors.white),
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      size: 14,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           Text(
             user.displayName,
+            textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -285,41 +380,45 @@ class _ProfileHeader extends StatelessWidget {
               letterSpacing: -0.3,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 4),
           Text(
             user.email,
-            style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 13.5,
+              color: AppColors.textMuted,
+            ),
           ),
           const SizedBox(height: 20),
-          // Stats row
-          Container(
-            margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            decoration: BoxDecoration(
-              color: AppColors.primaryDark.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: AppColors.primaryDark.withValues(alpha: 0.08)),
-            ),
+          ClayCard(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+            radius: AppRadius.lg,
+            shadows: AppShadows.subtle,
             child: Row(
               children: [
                 _StatBox(
                   label: 'Orders',
-                  value: '${user.orders.length}',
+                  value: loadingStats ? '—' : '$orderCount',
                   icon: Icons.receipt_rounded,
                 ),
                 Container(
-                    width: 1, height: 36, color: AppColors.border),
+                  width: 1,
+                  height: 40,
+                  color: const Color(0xFFD7DED4),
+                ),
                 _StatBox(
                   label: 'Total Spent',
-                  value: '₱${user.totalSpent.toInt()}',
+                  value: loadingStats ? '—' : _formatSpent(totalSpent),
                   icon: Icons.payments_outlined,
                 ),
                 Container(
-                    width: 1, height: 36, color: AppColors.border),
-                const _StatBox(
+                  width: 1,
+                  height: 40,
+                  color: const Color(0xFFD7DED4),
+                ),
+                _StatBox(
                   label: 'Member Since',
-                  value: '2026',
+                  value: loadingStats ? '—' : '$memberSinceYear',
                   icon: Icons.calendar_month_outlined,
                 ),
               ],
@@ -373,7 +472,7 @@ Future<void> _showAvatarSheet(BuildContext context, UserModel user) async {
                   width: 40,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: AppColors.surfaceSunken,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -434,7 +533,10 @@ Future<void> _showAvatarSheet(BuildContext context, UserModel user) async {
 }
 
 Future<void> _pickAndApply(
-    BuildContext context, UserModel user, ImageSource source) async {
+  BuildContext context,
+  UserModel user,
+  ImageSource source,
+) async {
   try {
     final picker = ImagePicker();
     final file = await picker.pickImage(
@@ -469,30 +571,24 @@ class _SheetAction extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isDestructive ? AppColors.error : AppColors.primaryDark;
-    return InkWell(
+    return ClayCard(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: color.withValues(alpha: 0.15)),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(width: 12),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: color,
-              ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      radius: AppRadius.md,
+      shadows: AppShadows.subtle,
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 12),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: color,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -502,16 +598,28 @@ class _StatBox extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
-  const _StatBox(
-      {required this.label, required this.value, required this.icon});
+  const _StatBox({
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Expanded(
       child: Column(
         children: [
-          Icon(icon, size: 18, color: AppColors.primaryMedium),
-          const SizedBox(height: 4),
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: AppColors.surfaceSunken,
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(color: const Color(0x55FFFFFF), width: 1),
+            ),
+            child: Icon(icon, size: 18, color: AppColors.primaryMedium),
+          ),
+          const SizedBox(height: 8),
           Text(
             value,
             style: const TextStyle(
@@ -520,6 +628,7 @@ class _StatBox extends StatelessWidget {
               color: AppColors.primaryDark,
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             label,
             style: const TextStyle(
@@ -553,23 +662,22 @@ class _MenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accent = iconColor ?? AppColors.primaryDark;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: (iconColor ?? AppColors.primaryDark)
-                    .withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(11),
+                color: AppColors.surfaceSunken,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0x55FFFFFF), width: 1),
               ),
-              child: Icon(icon,
-                  size: 20, color: iconColor ?? AppColors.primaryDark),
+              child: Icon(icon, size: 20, color: accent),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -584,6 +692,7 @@ class _MenuItem extends StatelessWidget {
                       color: labelColor ?? AppColors.textDark,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     subtitle,
                     style: const TextStyle(
@@ -596,72 +705,13 @@ class _MenuItem extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: AppColors.textMuted, size: 22),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.textMuted,
+              size: 22,
+            ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _InfoTile extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-
-  const _InfoTile({
-    required this.icon,
-    required this.label,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final isEmpty = value == 'Not set';
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.primaryDark.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(11),
-            ),
-            child: Icon(icon, size: 20, color: AppColors.primaryDark),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                      fontSize: 11, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  value,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight:
-                        isEmpty ? FontWeight.w400 : FontWeight.w600,
-                    color: isEmpty
-                        ? AppColors.textMuted
-                        : AppColors.textDark,
-                    fontStyle:
-                        isEmpty ? FontStyle.italic : FontStyle.normal,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }

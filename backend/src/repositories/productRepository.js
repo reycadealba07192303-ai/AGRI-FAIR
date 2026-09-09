@@ -1,12 +1,16 @@
 // src/repositories/productRepository.js
-import Product from '../models/Product.js';
+import Product, { STOREFRONT_FILTER } from '../models/Product.js';
 
 export const productRepository = {
 
   // Get all products with pagination and filtering
   async getAllProducts(page = 1, limit = 10, filters = {}) {
     const skip = (page - 1) * limit;
-    const query = {};
+
+    // Sold out and taken-down listings are hidden by default. The seller's own
+    // tools ask for them explicitly - they are the ones who need to see what
+    // has run out.
+    const query = filters.includeSoldOut ? {} : { ...STOREFRONT_FILTER };
 
     // Apply filters
     // The schema field is `variety`; accepting `category` too keeps the mobile
@@ -66,8 +70,11 @@ export const productRepository = {
   },
 
   // Get products by rice variety
-  async getProductsByCategory(variety) {
-    return await Product.find({ variety }).sort({ createdAt: -1 });
+  async getProductsByCategory(variety, { includeSoldOut = false } = {}) {
+    return await Product.find({
+      variety,
+      ...(includeSoldOut ? {} : STOREFRONT_FILTER),
+    }).sort({ createdAt: -1 });
   },
 
   // Get low stock products
@@ -96,8 +103,9 @@ export const productRepository = {
   },
 
   // Search products
-  async searchProducts(searchTerm) {
+  async searchProducts(searchTerm, { includeSoldOut = false } = {}) {
     return await Product.find({
+      ...(includeSoldOut ? {} : STOREFRONT_FILTER),
       $or: [
         { name: { $regex: searchTerm, $options: 'i' } },
         { description: { $regex: searchTerm, $options: 'i' } }

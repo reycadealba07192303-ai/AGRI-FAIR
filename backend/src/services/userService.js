@@ -18,12 +18,27 @@ export const getMeService = async (userId) => {
 // ====================== UPDATE PROFILE ======================
 const FLAT_FIELDS = ['name', 'email', 'contact', 'bio', 'pickupAddress', 'deliveryOrigin', 'theme', 'sellerType'];
 
+// Numbers, not text - the pickup point a rider navigates to. Handled apart
+// from FLAT_FIELDS because an empty string is a valid name and a nonsense
+// coordinate.
+const COORDINATE_FIELDS = { pickupLat: 90, pickupLng: 180 };
+
 export const updateProfileService = async (userId, updateData, uploadedFiles = {}) => {
   const filteredData = {};
   for (const key of FLAT_FIELDS) {
     if (updateData[key] !== undefined) {
       filteredData[key] = updateData[key];
     }
+  }
+
+  for (const [key, limit] of Object.entries(COORDINATE_FIELDS)) {
+    if (updateData[key] === undefined) continue;
+
+    const n = Number(updateData[key]);
+    if (!Number.isFinite(n) || n < -limit || n > limit) {
+      throw new Error(`${key} is not a valid coordinate.`);
+    }
+    filteredData[key] = n;
   }
 
   // Name and email are unique across users, and this route can change both.

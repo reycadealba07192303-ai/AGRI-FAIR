@@ -128,12 +128,14 @@ export const productService = {
   },
 
   // Get products by category
-  async getProductsByCategory(category) {
+  async getProductsByCategory(category, options = {}) {
     if (!category) {
       throw new Error('Category is required');
     }
 
-    return await withRatings(await productRepository.getProductsByCategory(category));
+    return await withRatings(
+      await productRepository.getProductsByCategory(category, options),
+    );
   },
 
   // Get low stock products
@@ -160,11 +162,13 @@ export const productService = {
   },
 
   // Search products
-  async searchProducts(searchTerm) {
+  async searchProducts(searchTerm, options = {}) {
     if (!searchTerm || searchTerm.trim() === '') {
       throw new Error('Search term is required');
     }
 
-    return await withRatings(await productRepository.searchProducts(searchTerm));
+    return await withRatings(
+      await productRepository.searchProducts(searchTerm, options),
+    );
   }
 };

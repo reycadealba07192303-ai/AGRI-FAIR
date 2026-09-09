@@ -17,6 +17,9 @@ class Address {
     this.notes = '',
     this.provinceCode = '',
     this.cityCode = '',
+    this.lat,
+    this.lng,
+    this.precision = '',
   });
 
   final String id;
@@ -38,6 +41,28 @@ class Address {
   /// "Green gate beside the sari-sari store" - what actually gets a rider to
   /// the door.
   final String notes;
+
+  /// The door itself, when the buyer has pinned it.
+  ///
+  /// Null for an address that was only typed. It is deliberately not filled in
+  /// by geocoding the text: "white house po bahay namin" would resolve to
+  /// somewhere confident and wrong, and a rider trusting that ends up further
+  /// from the door than if they had read the words.
+  final double? lat;
+  final double? lng;
+
+  /// How good that point is: `exact`, `approximate`, or nothing.
+  ///
+  /// `exact` is the buyer standing at their own door. `approximate` is the
+  /// barangay, worked out by the server from the province, city and barangay
+  /// they chose - the right part of the right town, not the door. The two are
+  /// never shown as the same thing.
+  final String precision;
+
+  bool get isPinned => lat != null && lng != null;
+  bool get isExact => precision == 'exact';
+  bool get isApproximate => precision == 'approximate';
+
   final bool isDefault;
 
   /// The address as one line, for the order and for the courier.
@@ -69,6 +94,9 @@ class Address {
       notes: (json['notes'] ?? '').toString(),
       provinceCode: (json['provinceCode'] ?? '').toString(),
       cityCode: (json['cityCode'] ?? '').toString(),
+      lat: (json['lat'] as num?)?.toDouble(),
+      lng: (json['lng'] as num?)?.toDouble(),
+      precision: (json['precision'] ?? '').toString(),
       isDefault: json['isDefault'] == true,
     );
   }
@@ -84,6 +112,11 @@ class Address {
         'notes': notes,
         'provinceCode': provinceCode,
         'cityCode': cityCode,
+        // An approximate pin is withheld: the server derived it from the
+        // barangay, and echoing it back would make the next edit look like the
+        // buyer had stood at the door. Anything else the buyer set is sent.
+        'lat': ?(isApproximate ? null : lat),
+        'lng': ?(isApproximate ? null : lng),
         'isDefault': isDefault,
       };
 }

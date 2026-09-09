@@ -144,5 +144,95 @@ export const emailVerificationService = {
     await user.save();
 
     return { message: 'Email verified. You can sign in now.' };
+  },
+
+  /**
+   * The first step for a delivery person: is there an account for this email?
+   *
+   * Unlike the password-reset endpoint, this one answers honestly. That is a
+   * deliberate trade: it tells a caller whether a given address is a delivery
+   * account still waiting to be set up, and knowing that buys them nothing -
+   * the account has no password anybody knows, and they would still need the
+   * code sent to that mailbox. In exchange, a rider who mistypes the address
+   * their shop gave them is told so, instead of waiting for an email that was
+   * never coming.
+   *
+   * Rate limited at the route, like every other code request.
+   */
+  async startDeliverySetup({ email }) {
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail) throw new Error('Enter the email your shop used.');
+
+    const user = await authRepository.findByEmail(cleanEmail);
+
+    if (!user || user.role !== 'rider') {
+      throw new Error(
+        'No delivery account uses that email. Ask your shop to add you first.'
+      );
+    }
+
+    if (user.status === 'suspended') {
+      throw new Error('This account is suspended. Ask your shop about it.');
+    }
+
+    if (user.passwordSet && user.emailVerified) {
+      const err = new Error('This account is ready — sign in with your password.');
+      err.code = 'ALREADY_ACTIVE';
+      throw err;
+    }
+
+    await otpService.issue({
+      email: cleanEmail,
+      purpose: OTP_PURPOSES.signup,
+      name: user.name,
+    });
+
+    return { name: user.name, email: cleanEmail, needsSetup: true };
+  },
+
+  /**
+   * Finishes an account somebody else created.
+   *
+   * A rider's account is made by their seller with a random password nobody is
+   * told - not even the seller, who should not be able to sign in as their own
+   * staff. This is where the rider proves the address is theirs and chooses
+   * the password for the first time, in one step, because there is nothing
+   * useful they could do in between.
+   *
+   * Both places are written. Firebase is what the login checks; the local hash
+   * is the offline fallback, and setting one without the other leaves an
+   * account that behaves differently depending on the network.
+   */
+  async activateAccount({ email, code, password }) {
+    if (!password || password.length < 6) {
+      throw new Error('Choose a password of at least 6 characters.');
+    }
+
+    const verified = await otpService.verify({
+      email,
+      code,
+      purpose: OTP_PURPOSES.signup,
+    });
+
+    const user = await authRepository.findByEmail(verified.email);
+    if (!user) throw new Error('User not found');
+
+    const auth = getFirebaseAuth();
+    if (user.firebaseUid) {
+      if (!auth) {
+        throw new Error('Authentication service unavailable, so the password cannot be set right now.');
+      }
+      await auth.updateUser(user.firebaseUid, {
+        password,
+        emailVerified: true,
+      });
+    }
+
+    user.password = await bcrypt.hash(password, 10);
+    user.emailVerified = true;
+    user.passwordSet = true;
+    await user.save();
+
+    return { message: 'Account ready. You can sign in now.' };
   }
 };

@@ -85,6 +85,19 @@ const productSchema = new mongoose.Schema({
   },
 });
 
+/**
+ * What a buyer is allowed to be shown.
+ *
+ * Taken down by the seller, or sold out - either way it cannot be bought, and
+ * a listing that cannot be bought is worse than no listing: it is tapped,
+ * added to a cart, and refused at checkout. Kept in one place so the shop, the
+ * search and the category pages cannot drift apart on what "available" means.
+ */
+export const STOREFRONT_FILTER = Object.freeze({
+  status: 'active',
+  stock: { $gt: 0 },
+});
+
 productSchema.pre('save', async function() {
   this.updatedAt = Date.now();
   // ✅ No next() call needed because the function is async

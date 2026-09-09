@@ -1,0 +1,142 @@
+/* Setting up an account somebody else created. */
+
+.ac-root {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+.ac-card {
+  width: min(420px, 100%);
+  padding: 1.5rem 1.3rem 1.3rem;
+  border-radius: 1rem;
+  background: #fdfcf7;
+  box-shadow: 0 6px 24px rgba(18, 33, 18, 0.1);
+}
+
+.ac-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+  color: #16231a;
+}
+
+.ac-brand span {
+  display: block;
+  font-size: 0.6rem;
+  letter-spacing: 0.13em;
+  opacity: 0.6;
+}
+
+.ac-brand strong { font-size: 1.05rem; }
+
+.ac-lede {
+  margin: 0 0 1.2rem;
+  font-size: 0.83rem;
+  line-height: 1.55;
+  opacity: 0.8;
+}
+
+.ac-form { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.ac-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.ac-form input {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 0.6rem;
+  font-size: 0.9rem;
+}
+
+/* Six digits read back more easily spaced out. */
+.ac-code {
+  letter-spacing: 0.45em;
+  text-align: center;
+  font-weight: 700;
+}
+
+.ac-form button { margin-top: 0.4rem; }
+
+.ac-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 0.8rem;
+}
+
+.ac-foot button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2f6b45;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ac-foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #2f6b45;
+  font-weight: 600;
+}
+
+/* Three steps, so somebody halfway through can see where they are. */
+.ac-steps {
+  display: flex;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0 0 1.1rem;
+  padding: 0;
+}
+
+.ac-step {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: 1;
+  padding: 0.35rem 0.4rem;
+  border-radius: 0.45rem;
+  background: rgba(0, 0, 0, 0.05);
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: rgba(35, 41, 31, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ac-step svg { flex-shrink: 0; }
+.ac-step span { overflow: hidden; text-overflow: ellipsis; }
+
+.ac-step--now { background: #2f6b45; color: #fff; }
+.ac-step--done { background: rgba(47, 107, 69, 0.15); color: #2f6b45; }
+
+.ac-back {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+  padding: 0.3rem;
+  border: 0;
+  background: none;
+  color: rgba(35, 41, 31, 0.65);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
