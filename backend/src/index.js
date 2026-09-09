@@ -33,10 +33,23 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
 const isLoopbackOrigin = (origin) =>
   /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
 
+// Preview + production Vercel hosts (https://app.vercel.app, https://app-git-main-user.vercel.app).
+const isVercelOrigin = (origin) => {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    return protocol === 'https:' && (
+      hostname === 'vercel.app' || hostname.endsWith('.vercel.app')
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const corsOrigin = (origin, callback) => {
   // Same-origin / curl / mobile apps send no Origin header.
   if (!origin) return callback(null, true);
   if (allowedOrigins.includes(origin)) return callback(null, true);
+  if (isVercelOrigin(origin)) return callback(null, true);
   if (process.env.NODE_ENV !== 'production' && isLoopbackOrigin(origin)) {
     return callback(null, true);
   }
