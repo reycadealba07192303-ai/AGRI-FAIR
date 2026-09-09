@@ -1,5 +1,11 @@
 {
-  "dependencies": {
-    "axios": "^1.13.6"
+  "name": "agrifair",
+  "private": true,
+  "scripts": {
+    "build": "npm --prefix backend ci --omit=dev",
+    "start": "npm --prefix backend start"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
