@@ -68,21 +68,17 @@ const HOW_TO_STEPS = [
   },
 ];
 
-/** Play Store / APK / hosting URL — set VITE_APP_DOWNLOAD_URL in .env when ready. */
+/** APK / Play Store URL — override with VITE_APP_DOWNLOAD_URL in .env when needed. */
 const APP_DOWNLOAD_URL =
-  import.meta.env.VITE_APP_DOWNLOAD_URL?.trim() || '';
+  import.meta.env.VITE_APP_DOWNLOAD_URL?.trim() ||
+  'https://drive.google.com/file/d/103PzpjBsiWU0bW8iLgqojdNuYaMCk6bQ/view?usp=sharing';
 
 export default function LandingPage() {
   const navigate = useNavigate();
   const heroRef = useRef(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
-  const downloadUrl =
-    APP_DOWNLOAD_URL ||
-    (typeof window !== 'undefined'
-      ? `${window.location.origin}/#download`
-      : '#download');
-  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=12&data=${encodeURIComponent(downloadUrl)}`;
+  const downloadUrl = APP_DOWNLOAD_URL;
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -361,27 +357,24 @@ export default function LandingPage() {
             </button>
             <h3 id="lp-dl-modal-title">Install AgriFair</h3>
             <p className="lp-dl-modal-hint">
-              Scan the QR with your phone, or open / copy the link below.
+              Scan the QR with your phone, or tap Download here.
             </p>
             <img
               className="lp-dl-modal-qr"
-              src={qrSrc}
+              src="/app-preview/apk-qr.png"
               alt="QR code to download AgriFair"
               width={200}
               height={200}
             />
-            <div className="lp-dl-modal-linkbox">
-              <code>{downloadUrl}</code>
-            </div>
+            <a
+              className="lp-dl-modal-download-link"
+              href={downloadUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              DOWNLOAD HERE
+            </a>
             <div className="lp-dl-modal-actions">
-              <a
-                className="lp-dl-modal-open"
-                href={downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                Open link
-              </a>
               <button
                 type="button"
                 className="lp-dl-modal-copy"

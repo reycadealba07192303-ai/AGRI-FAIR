@@ -1110,31 +1110,36 @@
   padding: 8px;
 }
 
-.lp-dl-modal-linkbox {
-  margin-bottom: 1.1rem;
-  padding: 0.7rem 0.85rem;
-  border-radius: 12px;
-  background: #f3f5f0;
-  border: 1px solid rgba(18, 33, 18, 0.08);
-  text-align: left;
-  overflow: hidden;
+.lp-dl-modal-download-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin: 0 0 1rem;
+  padding: 0.95rem 1.1rem;
+  border-radius: 999px;
+  background: var(--green-900);
+  color: #fff;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-decoration: none;
+  box-shadow: 0 12px 28px rgba(18, 33, 18, 0.18);
+  transition: background 0.22s ease, transform 0.22s ease;
 }
 
-.lp-dl-modal-linkbox code {
-  display: block;
-  font-size: 0.78rem;
-  color: var(--green-900);
-  word-break: break-all;
-  line-height: 1.4;
+.lp-dl-modal-download-link:hover {
+  background: var(--green-800);
+  transform: translateY(-1px);
 }
 
 .lp-dl-modal-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.65rem;
 }
 
-.lp-dl-modal-open,
 .lp-dl-modal-copy {
   display: inline-flex;
   align-items: center;
@@ -1147,18 +1152,6 @@
   cursor: pointer;
   text-decoration: none;
   border: none;
-}
-
-.lp-dl-modal-open {
-  background: var(--green-900);
-  color: #fff;
-}
-
-.lp-dl-modal-open:hover {
-  background: var(--green-800);
-}
-
-.lp-dl-modal-copy {
   background: #fff;
   color: var(--green-900);
   border: 1.5px solid rgba(18, 33, 18, 0.18);
