@@ -93,7 +93,23 @@ export default function LandingPage() {
     );
 
     document.querySelectorAll('.animate-on-scroll').forEach((el) => observer.observe(el));
+    // Reveal anything already in view (or stuck near the fold) so CTAs are never invisible.
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.animate-on-scroll').forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight * 0.92) el.classList.add('visible');
+      });
+    });
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const hash = window.location.hash?.replace(/^#/, '');
+    if (!hash) return undefined;
+    const t = window.setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    return () => window.clearTimeout(t);
   }, []);
 
   useEffect(() => {
@@ -120,6 +136,14 @@ export default function LandingPage() {
     }
   };
 
+  const scrollToSection = (id) => (e) => {
+    e.preventDefault();
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.history.replaceState(null, '', `#${id}`);
+  };
+
   return (
     <div className="lp-root">
       {/* NAV */}
@@ -130,10 +154,10 @@ export default function LandingPage() {
             <span className="lp-logo-text">AgriFair</span>
           </div>
           <div className="lp-nav-links">
-            <a href="#features">Features</a>
-            <a href="#about">About</a>
-            <a href="#how-to-use">How to use</a>
-            <a href="#download">Download</a>
+            <a href="#features" onClick={scrollToSection('features')}>Features</a>
+            <a href="#about" onClick={scrollToSection('about')}>About</a>
+            <a href="#how-to-use" onClick={scrollToSection('how-to-use')}>How to use</a>
+            <a href="#download" onClick={scrollToSection('download')}>Download</a>
             <button className="lp-nav-cta" onClick={() => navigate('/login')}>
               Sign In
             </button>
@@ -240,7 +264,11 @@ export default function LandingPage() {
             <button className="lp-btn-primary" onClick={() => navigate('/login')}>
               Sign In Now <span className="lp-btn-arrow">→</span>
             </button>
-            <a className="lp-btn-howto" href="#how-to-use">
+            <a
+              className="lp-btn-howto"
+              href="#how-to-use"
+              onClick={scrollToSection('how-to-use')}
+            >
               How to use the app <span className="lp-btn-arrow">→</span>
             </a>
           </div>
@@ -275,7 +303,11 @@ export default function LandingPage() {
               One path from install to delivery. Follow the four steps, then
               grab the app below.
             </p>
-            <a className="lp-btn-white" href="#download">
+            <a
+              className="lp-btn-white"
+              href="#download"
+              onClick={scrollToSection('download')}
+            >
               Get the app <span className="lp-btn-arrow">→</span>
             </a>
           </div>
@@ -406,11 +438,42 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* END CTA */}
+      <section className="lp-cta" id="get-started">
+        <div className="lp-cta-bg" aria-hidden="true">
+          <div className="lp-blob lp-blob-4" />
+          <div className="lp-blob lp-blob-5" />
+        </div>
+        <div className="lp-cta-inner">
+          <h2>Ready to run your fair?</h2>
+          <p>
+            Sign in to the web portal for sellers and admins, or download the
+            mobile app for buyers and delivery riders.
+          </p>
+          <div className="lp-cta-actions">
+            <button
+              type="button"
+              className="lp-btn-white"
+              onClick={() => navigate('/login')}
+            >
+              Sign in to portal <span className="lp-btn-arrow">→</span>
+            </button>
+            <a
+              className="lp-btn-outline-white"
+              href="#download"
+              onClick={scrollToSection('download')}
+            >
+              Download the app
+            </a>
+          </div>
+        </div>
+      </section>
+
       {/* FOOTER */}
       <footer className="lp-footer">
         <div className="lp-footer-inner">
           <div className="lp-footer-top">
-            <div className="lp-logo">
+            <div className="lp-logo" onClick={() => navigate('/')}>
               <img src={logoImg} alt="AgriFair Logo" className="lp-logo-img" />
               <span className="lp-logo-text">AgriFair</span>
             </div>
@@ -418,12 +481,12 @@ export default function LandingPage() {
           </div>
           <div className="lp-footer-divider" />
           <div className="lp-footer-bottom">
-            <p className="lp-footer-copy">© 2025 AgriFair. Capstone Project. All rights reserved.</p>
+            <p className="lp-footer-copy">© 2026 AgriFair. Capstone Project. All rights reserved.</p>
             <div className="lp-footer-links">
-              <a href="#features">Features</a>
-              <a href="#about">About</a>
-              <a href="#how-to-use">How to use</a>
-              <a href="#download">Download</a>
+              <a href="#features" onClick={scrollToSection('features')}>Features</a>
+              <a href="#about" onClick={scrollToSection('about')}>About</a>
+              <a href="#how-to-use" onClick={scrollToSection('how-to-use')}>How to use</a>
+              <a href="#download" onClick={scrollToSection('download')}>Download</a>
             </div>
           </div>
         </div>
