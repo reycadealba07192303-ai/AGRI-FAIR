@@ -1,268 +1,401 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Truck, ArrowRight, ArrowLeft, Mail, KeyRound, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  startDeliverySetup,
+  Lock,
+  Eye,
+  EyeOff,
+  Check,
+  Mail,
+  Clock,
+  CheckCircle2,
+  Ban,
+  Link2Off,
+  Smartphone,
+} from 'lucide-react';
+import {
+  fetchActivationStatus,
   activateAccount,
-  resendActivationCode,
+  resendActivationLink,
 } from '../../services/riderApi';
-import './RiderPage.css';
+import { APP_DOWNLOAD_URL, openAppHref, tryOpenApp } from '../../utils/appLinks';
+import logoImg from '../../assets/logo.png';
 import './ActivatePage.css';
 
 /**
- * Setting up an account somebody else created.
+ * Creating the password for an account somebody else created, from the
+ * emailed link.
  *
  * A delivery person's account is made by their seller with a random password
  * nobody is told — not even the seller, who should not be able to sign in as
- * their own staff. This is where the rider claims it.
+ * their own staff. The link proves the address is theirs, so the only thing
+ * left to ask is the password.
  *
- * Three steps, in the order the person actually thinks in: who are you, choose
- * a password, prove the address is yours. The email is checked first so a
- * mistyped address is caught before anybody invents a password for it.
+ * It is opened on a phone, from an email, by somebody who will then use the
+ * AgriFair app — so it looks like the app's own sign-in screen, not the web
+ * portal.
  *
- * The password is held here until the code checks out, and only then sent -
- * one call sets it, so a half-finished attempt leaves nothing behind.
+ * Opening this page changes nothing. Mail scanners follow links, and a page
+ * that activated on load would be used up before the rider saw it.
+ *
+ * Every link lands on one of these:
+ *   valid     create a password
+ *   expired   send a new link, to the address already on the account
+ *   active    already set up — go sign in
+ *   suspended nothing to do here; ask the shop
+ *   invalid   replaced by a newer link, or never was one
  */
-const STEPS = ['email', 'password', 'verify'];
+
+/** Server codes that mean the link's state changed under the page. */
+const STATE_FOR_CODE = {
+  ACTIVATION_EXPIRED: 'expired',
+  ACTIVATION_INVALID: 'invalid',
+  ALREADY_ACTIVE: 'active',
+  ACCOUNT_SUSPENDED: 'suspended',
+};
+
+const MIN_LENGTH = 6;
+
+/** Only phones have the app, so only phones get sent to it unasked. */
+const isPhone = () =>
+  typeof navigator !== 'undefined' && /android|iphone|ipad|ipod/i.test(navigator.userAgent);
+
+function message(err, fallback) {
+  return err.response?.data?.message || err.response?.data?.error || fallback;
+}
 
 export default function ActivatePage() {
-  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const token = params.get('token') || '';
 
-  const [step, setStep] = useState('email');
-  const [name, setName] = useState('');
-  const [form, setForm] = useState({ email: '', password: '', confirm: '', code: '' });
+  const [state, setState] = useState(token ? 'loading' : 'invalid');
+  const [who, setWho] = useState({ name: '', email: '' });
+  const [form, setForm] = useState({ password: '', confirm: '' });
+  const [show, setShow] = useState({ password: false, confirm: false });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
+  const [sentTo, setSentTo] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+  // idle: offer "Open AgriFair App" · opening: trying right now
+  const [launch, setLaunch] = useState('idle');
+  const triedApp = useRef(false);
 
-  const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+  // Once the account is ready, go straight to the app.
+  //
+  // This works right after "Create Password", while the tap still counts.
+  // Chrome refuses to open an app from a page nobody has touched, so simply
+  // re-opening an old link lands on the button instead. A page cannot tell
+  // "refused" from "not installed", so it never claims the app is missing:
+  // the button opens the app when it is there and the download when it is not.
+  useEffect(() => {
+    if (state !== 'done' && state !== 'active') return;
+    if (triedApp.current || !isPhone()) return;
+    triedApp.current = true;
 
-  function fail(err, fallback) {
-    setError(err.response?.data?.message || err.response?.data?.error || fallback);
-  }
+    setLaunch('opening');
+    tryOpenApp().then(() => setLaunch('idle'));
+  }, [state]);
 
-  /** Step one: is there an account for this address, and send the code. */
-  async function findAccount(e) {
-    e.preventDefault();
-    setBusy(true);
+  useEffect(() => {
+    if (!token) return undefined;
+    let cancelled = false;
+
+    fetchActivationStatus(token)
+      .then((res) => {
+        if (cancelled) return;
+        setWho({ name: res.data?.name || '', email: res.data?.email || '' });
+        setState(res.data?.state || 'invalid');
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setState('error');
+        setError(message(err, 'Could not check this link. Check your connection and reload.'));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Counts the resend button down after the server says "not yet".
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
+
+  const longEnough = form.password.length >= MIN_LENGTH;
+  const matches = form.confirm.length > 0 && form.password === form.confirm;
+
+  const set = (key) => (e) => {
+    setForm((f) => ({ ...f, [key]: e.target.value }));
     setError('');
-    setNotice('');
+  };
 
-    try {
-      const res = await startDeliverySetup(form.email.trim());
-      setName(res.data?.name || '');
-      setStep('password');
-      setNotice(`We sent a 6-digit code to ${form.email.trim()}.`);
-    } catch (err) {
-      // Already set up: nothing to do here, so point at the door they want.
-      if (err.response?.data?.code === 'ALREADY_ACTIVE') {
-        setError('This account is ready. Sign in with your password instead.');
-      } else {
-        fail(err, 'Could not find that delivery account.');
-      }
-    } finally {
-      setBusy(false);
-    }
-  }
+  const toggle = (key) => setShow((s) => ({ ...s, [key]: !s[key] }));
 
-  /** Step two: the password, kept here until the code proves the address. */
-  function choosePassword(e) {
-    e.preventDefault();
-    setError('');
-
-    if (form.password.length < 6) {
-      setError('Choose a password of at least 6 characters.');
+  /** A failure that is really the link changing state moves the page with it. */
+  function handleFailure(err, fallback) {
+    const next = STATE_FOR_CODE[err.response?.data?.code];
+    if (next) {
+      setState(next);
+      setError('');
       return;
     }
-    if (form.password !== form.confirm) {
+    setError(message(err, fallback));
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+
+    if (!longEnough) {
+      setError(`Use at least ${MIN_LENGTH} characters.`);
+      return;
+    }
+    if (!matches) {
       setError('The two passwords do not match.');
       return;
     }
 
-    setStep('verify');
-  }
-
-  /** Step three: the code, and the account is real. */
-  async function verify(e) {
-    e.preventDefault();
     setBusy(true);
     setError('');
-
     try {
-      await activateAccount({
-        email: form.email.trim(),
-        code: form.code.trim(),
-        password: form.password,
-      });
-      navigate('/login', { replace: true });
+      await activateAccount({ token, password: form.password });
+      setForm({ password: '', confirm: '' });
+      setState('done');
     } catch (err) {
-      fail(err, 'That code did not work. Check it and try again.');
+      handleFailure(err, 'Could not create your password. Try again.');
     } finally {
       setBusy(false);
     }
   }
 
   async function resend() {
+    setBusy(true);
     setError('');
     try {
-      await resendActivationCode(form.email.trim());
-      setNotice('A new code is on its way. It is good for a few minutes.');
+      const res = await resendActivationLink(token);
+      // This link was just replaced, so the button has nothing left to do.
+      setSentTo(res.data?.sentTo || who.email);
     } catch (err) {
-      fail(err, 'Could not send a new code.');
+      if (err.response?.data?.code === 'RESEND_COOLDOWN') {
+        setCooldown(err.response.data.retryAfter || 60);
+      } else {
+        handleFailure(err, 'Could not send a new link. Try again.');
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
-  function back() {
-    setError('');
-    setStep(STEPS[Math.max(0, STEPS.indexOf(step) - 1)]);
-  }
-
-  const stepNumber = STEPS.indexOf(step) + 1;
-
   return (
-    <div className="rp-root ac-root">
-      <div className="ac-card">
-        <div className="ac-brand">
-          <Truck size={22} strokeWidth={2.2} />
-          <div>
-            <span>AGRIFAIR DELIVERY</span>
-            <strong>{name ? `Hello, ${name}` : 'Set up your account'}</strong>
+    <div className="act">
+      <div className="act-leaf act-leaf--right" aria-hidden="true" />
+      <div className="act-leaf act-leaf--left" aria-hidden="true" />
+
+      <main className="act-shell">
+        <header className="act-brand">
+          <span className="act-wordmark">AGRIFAIR</span>
+          <div className="act-logo">
+            <img src={logoImg} alt="AgriFair" />
           </div>
-        </div>
+        </header>
 
-        <ol className="ac-steps" aria-label={`Step ${stepNumber} of 3`}>
-          {[
-            { key: 'email', icon: Mail, label: 'Your email' },
-            { key: 'password', icon: KeyRound, label: 'Password' },
-            { key: 'verify', icon: ShieldCheck, label: 'Verify' },
-          ].map(({ key, icon: Icon, label }, i) => (
-            <li
-              key={key}
-              className={
-                STEPS.indexOf(key) < STEPS.indexOf(step)
-                  ? 'ac-step ac-step--done'
-                  : key === step
-                    ? 'ac-step ac-step--now'
-                    : 'ac-step'
-              }
-            >
-              <Icon size={14} strokeWidth={2.4} />
-              <span>{i + 1}. {label}</span>
-            </li>
-          ))}
-        </ol>
-
-        {step === 'email' && (
-          <form onSubmit={findAccount} className="ac-form">
-            <p className="ac-lede">
-              Your shop added you with an email. Type it and we will send a code
-              to that mailbox.
-            </p>
-            <label>
-              <span>Email</span>
-              <input
-                type="email"
-                required
-                autoFocus
-                autoComplete="username"
-                value={form.email}
-                onChange={set('email')}
-                placeholder="the address your shop used"
-              />
-            </label>
-
-            {error && <p className="rp-error">{error}</p>}
-
-            <button className="rp-btn rp-btn--primary" type="submit" disabled={busy}>
-              {busy ? 'Checking…' : 'Continue'}
-              {!busy && <ArrowRight size={15} strokeWidth={2.4} />}
-            </button>
-          </form>
+        {state === 'loading' && (
+          <div className="act-body" aria-busy="true" aria-label="Checking your link">
+            <div className="act-skeleton act-skeleton--title" />
+            <div className="act-skeleton act-skeleton--line" />
+            <div className="act-skeleton act-skeleton--field" />
+            <div className="act-skeleton act-skeleton--field" />
+            <div className="act-skeleton act-skeleton--button" />
+          </div>
         )}
 
-        {step === 'password' && (
-          <form onSubmit={choosePassword} className="ac-form">
-            <p className="ac-lede">
-              Choose a password. Nobody else will know it — not even your shop.
+        {state === 'valid' && (
+          <form className="act-body" onSubmit={submit} noValidate>
+            <h1 className="act-title">Create your password</h1>
+            <p className="act-subtitle">
+              {who.name ? `Hi ${who.name.split(' ')[0]}, ` : ''}
+              set a password for <strong>{who.email}</strong>. You will use it to
+              sign in on the AgriFair app.
             </p>
-            <label>
-              <span>New password</span>
+
+            <label className="act-label" htmlFor="act-password">New password</label>
+            <div className="act-field">
+              <Lock size={18} strokeWidth={2} className="act-field-icon" />
               <input
-                type="password"
-                required
-                autoFocus
+                id="act-password"
+                type={show.password ? 'text' : 'password'}
                 autoComplete="new-password"
+                autoFocus
                 value={form.password}
                 onChange={set('password')}
-                placeholder="at least 6 characters"
+                placeholder="Enter a new password"
+                disabled={busy}
               />
-            </label>
-            <label>
-              <span>Type it again</span>
+              <button
+                type="button"
+                className="act-eye"
+                onClick={() => toggle('password')}
+                aria-label={show.password ? 'Hide password' : 'Show password'}
+              >
+                {show.password ? <Eye size={18} /> : <EyeOff size={18} />}
+              </button>
+            </div>
+
+            <label className="act-label" htmlFor="act-confirm">Confirm password</label>
+            <div className="act-field">
+              <Lock size={18} strokeWidth={2} className="act-field-icon" />
               <input
-                type="password"
-                required
+                id="act-confirm"
+                type={show.confirm ? 'text' : 'password'}
                 autoComplete="new-password"
                 value={form.confirm}
                 onChange={set('confirm')}
+                placeholder="Type it again"
+                disabled={busy}
               />
-            </label>
+              <button
+                type="button"
+                className="act-eye"
+                onClick={() => toggle('confirm')}
+                aria-label={show.confirm ? 'Hide password' : 'Show password'}
+              >
+                {show.confirm ? <Eye size={18} /> : <EyeOff size={18} />}
+              </button>
+            </div>
 
-            {error && <p className="rp-error">{error}</p>}
-            {notice && <p className="rp-notice">{notice}</p>}
+            <ul className="act-checks">
+              <li className={longEnough ? 'is-ok' : ''}>
+                <Check size={14} strokeWidth={3} /> At least {MIN_LENGTH} characters
+              </li>
+              <li className={matches ? 'is-ok' : ''}>
+                <Check size={14} strokeWidth={3} /> Both passwords match
+              </li>
+            </ul>
 
-            <button className="rp-btn rp-btn--primary" type="submit">
-              Continue <ArrowRight size={15} strokeWidth={2.4} />
+            {error && <p className="act-error" role="alert">{error}</p>}
+
+            <button type="submit" className="act-button" disabled={busy}>
+              {busy ? <span className="act-spinner" aria-label="Saving" /> : 'Create Password'}
             </button>
-            <button className="ac-back" type="button" onClick={back}>
-              <ArrowLeft size={13} strokeWidth={2.4} /> Change the email
-            </button>
-          </form>
-        )}
 
-        {step === 'verify' && (
-          <form onSubmit={verify} className="ac-form">
-            <p className="ac-lede">
-              Last step. Enter the 6-digit code sent to{' '}
-              <strong>{form.email.trim()}</strong>.
+            <p className="act-note">
+              Only you will know this password — not even your shop.
             </p>
-            <label>
-              <span>Code from your email</span>
-              <input
-                type="text"
-                required
-                autoFocus
-                inputMode="numeric"
-                maxLength={6}
-                className="ac-code"
-                value={form.code}
-                onChange={set('code')}
-                placeholder="000000"
-              />
-            </label>
-
-            {error && <p className="rp-error">{error}</p>}
-            {notice && <p className="rp-notice">{notice}</p>}
-
-            <button className="rp-btn rp-btn--primary" type="submit" disabled={busy}>
-              <ShieldCheck size={15} strokeWidth={2.3} />
-              {busy ? 'Verifying…' : 'Verify and finish'}
-            </button>
-            <button className="ac-back" type="button" onClick={back}>
-              <ArrowLeft size={13} strokeWidth={2.4} /> Back
-            </button>
           </form>
         )}
 
-        <div className="ac-foot">
-          {step !== 'email' && (
-            <button type="button" onClick={resend}>Send the code again</button>
-          )}
-          <Link to="/login">
-            Already set up? Sign in <ArrowRight size={13} strokeWidth={2.4} />
-          </Link>
-        </div>
-      </div>
+        {state === 'expired' && (
+          <section className="act-body act-state">
+            <span className="act-state-icon act-state-icon--wait">
+              <Clock size={26} strokeWidth={2.2} />
+            </span>
+            {sentTo ? (
+              <>
+                <h1 className="act-title">Check your inbox</h1>
+                <p className="act-subtitle">
+                  We sent a new link to <strong>{sentTo}</strong>. Open the newest
+                  email — this link no longer works.
+                </p>
+              </>
+            ) : (
+              <>
+                <h1 className="act-title">This link has expired</h1>
+                <p className="act-subtitle">
+                  Links work for 48 hours. We can send a new one to{' '}
+                  <strong>{who.email}</strong>.
+                </p>
+
+                {error && <p className="act-error" role="alert">{error}</p>}
+
+                <button
+                  type="button"
+                  className="act-button"
+                  onClick={resend}
+                  disabled={busy || cooldown > 0}
+                >
+                  {busy ? (
+                    <span className="act-spinner" aria-label="Sending" />
+                  ) : (
+                    <>
+                      <Mail size={17} strokeWidth={2.2} />
+                      {cooldown > 0 ? `Resend in ${cooldown}s` : 'Resend Activation Email'}
+                    </>
+                  )}
+                </button>
+              </>
+            )}
+          </section>
+        )}
+
+        {(state === 'active' || state === 'done') && (
+          <section className="act-body act-state">
+            <span className="act-state-icon act-state-icon--ok">
+              <CheckCircle2 size={26} strokeWidth={2.2} />
+            </span>
+            <h1 className="act-title">
+              {state === 'done' ? 'Password created' : 'Already set up'}
+            </h1>
+            <p className="act-subtitle">
+              Your delivery account is ready. Sign in with{' '}
+              {who.email ? <strong>{who.email}</strong> : 'your email'} and your
+              new password.
+            </p>
+
+            {launch === 'opening' && (
+              <div className="act-opening" role="status">
+                <span className="act-spinner act-spinner--dark" />
+                Opening the AgriFair app…
+              </div>
+            )}
+
+            {launch === 'idle' && (
+              <>
+                <a className="act-button" href={openAppHref()}>
+                  <Smartphone size={18} strokeWidth={2.2} />
+                  Open AgriFair App
+                </a>
+                <p className="act-note">
+                  No app yet?{' '}
+                  <a className="act-link" href={APP_DOWNLOAD_URL}>
+                    Download AgriFair
+                  </a>
+                </p>
+              </>
+            )}
+
+          </section>
+        )}
+
+        {state === 'suspended' && (
+          <section className="act-body act-state">
+            <span className="act-state-icon act-state-icon--off">
+              <Ban size={26} strokeWidth={2.2} />
+            </span>
+            <h1 className="act-title">Account suspended</h1>
+            <p className="act-subtitle">Ask the shop you deliver for about it.</p>
+          </section>
+        )}
+
+        {state === 'invalid' && (
+          <section className="act-body act-state">
+            <span className="act-state-icon act-state-icon--off">
+              <Link2Off size={26} strokeWidth={2.2} />
+            </span>
+            <h1 className="act-title">Link no longer valid</h1>
+            <p className="act-subtitle">
+              A newer link may have been sent. Open the newest AgriFair email, or
+              ask your shop to send you a new one.
+            </p>
+          </section>
+        )}
+
+        {state === 'error' && (
+          <section className="act-body act-state">
+            <p className="act-error" role="alert">{error}</p>
+          </section>
+        )}
+      </main>
     </div>
   );
 }

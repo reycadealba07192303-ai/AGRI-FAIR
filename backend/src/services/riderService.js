@@ -4,7 +4,7 @@ import Order from '../models/Order.js';
 import { authRepository } from '../repositories/authRepository.js';
 import { findUserByUserId } from '../repositories/userRepository.js';
 import { getFirebaseAuth } from '../config/firebase.js';
-import { emailVerificationService } from './passwordResetService.js';
+import { activationService } from './activationService.js';
 import { toNameKey } from '../models/User.js';
 import * as notificationRepo from '../repositories/notificationRepository.js';
 
@@ -14,7 +14,7 @@ import * as notificationRepo from '../repositories/notificationRepository.js';
  * A rider does not sign themselves up. The seller enters a name and an email,
  * and the account is created with a password nobody knows - not even the
  * seller, who should not be able to sign in as their staff. The rider gets a
- * code by email and chooses their own password when they activate.
+ * link by email and chooses their own password on the page it opens.
  *
  * They see only the orders assigned to them. A delivery person hired by one
  * shop has no business reading another shop's orders, and assignment - not
@@ -50,8 +50,8 @@ export const riderService = {
   /**
    * Takes on a delivery person: a name and an email, nothing else.
    *
-   * The password is random and thrown away. The rider sets their own when they
-   * activate with the emailed code, so nobody but them has ever known it.
+   * The password is random and thrown away. The rider sets their own from the
+   * emailed activation link, so nobody but them has ever known it.
    */
   async add(sellerUserId, { name, email, contact }) {
     const cleanName = clean(name);
@@ -116,21 +116,25 @@ export const riderService = {
       throw err;
     }
 
-    // The same six digits every other account gets. Failure is reported rather
-    // than thrown: the account exists, and the seller can resend.
-    let codeSent = true;
+    // Failure is reported rather than thrown: the account exists, and the
+    // seller can resend.
+    let linkSent = true;
     try {
-      await emailVerificationService.sendSignupOtp(rider);
+      await activationService.issue(rider);
     } catch (err) {
-      console.error('[rider] could not send the activation code:', err.message);
-      codeSent = false;
+      console.error('[rider] could not send the activation link:', err.message);
+      linkSent = false;
     }
 
-    return { ...toPublicRider(rider), codeSent };
+    return { ...toPublicRider(rider), linkSent };
   },
 
-  /** Sends the activation code again, for a rider who never got the first. */
-  async resendCode(sellerUserId, riderUserId) {
+  /**
+   * Sends a new activation link, for a rider who never got the first or lost
+   * it. The rider can do this themselves from an expired link; this is for the
+   * one who has no link at all.
+   */
+  async resendLink(sellerUserId, riderUserId) {
     const rider = await User.findOne({
       userId: Number(riderUserId),
       role: 'rider',
@@ -140,9 +144,11 @@ export const riderService = {
     if (rider.passwordSet && rider.emailVerified) {
       throw new Error('This account is already active.');
     }
+    if (rider.status === 'suspended') {
+      throw new Error('Reinstate this delivery person before sending them a link.');
+    }
 
-    await emailVerificationService.sendSignupOtp(rider);
-    return { sent: true };
+    return activationService.issue(rider);
   },
 
   /**

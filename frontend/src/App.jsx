@@ -7,6 +7,8 @@ import ForgotPasswordPage from './pages/landing/ForgotPasswordPage.jsx';
 
 import AdminPage from './pages/admin/AdminPage.jsx';
 import SuperAdminPage from './pages/superadmin/SuperAdminPage.jsx';
+import RiderPage from './pages/rider/RiderPage.jsx';
+import ActivatePage from './pages/rider/ActivatePage.jsx';
 import { getHomePath, getSessionUser, clearSession } from './utils/auth.js';
 
 const getAuth = () => {
@@ -77,6 +79,11 @@ export default function App() {
           </PublicOnlyRoute>
         } />
 
+        {/* A rider creating the password for the account their shop made,
+            from the emailed link. Open to everyone: the token is the key, and
+            a signed-in session on this browser has nothing to do with it. */}
+        <Route path="/activate" element={<ActivatePage />} />
+
         <Route path="/admin" element={<Navigate to="/client" replace />} />
 
         <Route path="/client" element={
@@ -88,6 +95,14 @@ export default function App() {
         <Route path="/superadmin" element={
           <ProtectedRoute role="superadmin">
             <SuperAdminPage onLogout={handleLogout} />
+          </ProtectedRoute>
+        } />
+
+        {/* Where a rider signing in on the web lands. Without it, "/rider"
+            fell through to "*", back to "/", and was sent to "/rider" again. */}
+        <Route path="/rider" element={
+          <ProtectedRoute role="rider">
+            <RiderPage />
           </ProtectedRoute>
         } />
 

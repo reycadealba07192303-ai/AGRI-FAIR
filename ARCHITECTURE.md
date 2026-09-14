@@ -378,11 +378,15 @@ sequenceDiagram
 
     S->>A: POST /riders {name, email}
     A->>A: account + random password<br/>na walang nakakaalam
-    A->>R: 6-digit code sa email
-    R->>A: POST /auth/delivery/start {email}
-    A-->>R: may account, code ipinadala
-    R->>A: POST /auth/activate {email, code, password}
-    Note over R: siya ang pumili ng password
+    A->>R: activation link sa email (48 oras)
+    R->>A: POST /auth/activate/status {token}
+    A-->>R: valid / expired / active / invalid
+    R->>A: POST /auth/activate {token, password}
+    Note over R: siya ang pumili ng password,<br/>sign in sa app pagkatapos
+    opt kung expired ang link
+        R->>A: POST /auth/activate/resend {token}
+        A->>R: bagong link sa email na nasa account
+    end
 
     S->>A: PUT /riders/assign/:orderId
     Note over A: dito lang nabubuksan<br/>ang order sa rider

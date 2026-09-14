@@ -190,7 +190,7 @@ class _WelcomeScreenState extends State<WelcomeScreen>
           children: [
             _glow(logoSize, AppColors.primaryLight.withValues(alpha: 0.22)),
             Image.asset(
-              'assets/products/AI, 3rd Draft(1).png',
+              'assets/brand/agrifair_logo.png',
               width: logoSize * 0.88,
               height: logoSize * 0.88,
               fit: BoxFit.contain,

@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:mobile_app/screens/delivery_setup_screen.dart';
 import 'package:mobile_app/screens/forgot_password_screen.dart';
 import 'package:mobile_app/screens/sign_in_screen.dart';
 import 'package:mobile_app/screens/sign_up_screen.dart';
 import 'package:mobile_app/theme/app_theme.dart';
 
-/// The four account screens, laid out on a real phone size.
+/// The account screens, laid out on a real phone size.
 void main() {
   const sizes = <String, Size>{
     'a normal phone': Size(1080, 2340),
@@ -31,7 +30,9 @@ void main() {
 
         expect(find.text('Welcome Back'), findsOneWidget);
         expect(find.text('Sign In'), findsOneWidget);
-        expect(find.text('Signing in as a delivery rider?'), findsOneWidget);
+        // Riders sign in on this same form; setting up happens from the
+        // emailed link, so there is no separate door for them here.
+        expect(find.text('Signing in as a delivery rider?'), findsNothing);
         expect(find.text('Still signed in'), findsNothing);
       });
 
@@ -45,13 +46,6 @@ void main() {
         await pump(tester, const ForgotPasswordScreen(), entry.value);
 
         expect(find.text('Forgot password?'), findsOneWidget);
-      });
-
-      testWidgets('the delivery setup lays out', (tester) async {
-        await pump(tester, const DeliverySetupScreen(), entry.value);
-
-        expect(find.text('Your email.'), findsOneWidget);
-        expect(find.text('Continue'), findsOneWidget);
       });
     });
   }

@@ -4,6 +4,7 @@ import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import { findUserByUserId } from '../repositories/userRepository.js';
 import { postOrderSystemMessage } from './chatService.js';
+import { isSellerSuspended, suspendedSellerIds } from './sellerAvailability.js';
 
 /** Two lines are the same line only if the rice and the sack size both match. */
 const sameLine = (item, productId, weightKg) =>
@@ -24,8 +25,12 @@ function priceForWeight(product, weightKg) {
  */
 async function decorate(cart) {
   const ids = cart.items.map((i) => i.productId);
-  const products = await Product.find({ _id: { $in: ids } }).lean();
+  const [products, suspended] = await Promise.all([
+    Product.find({ _id: { $in: ids } }).lean(),
+    suspendedSellerIds(),
+  ]);
   const byId = new Map(products.map((p) => [String(p._id), p]));
+  const closed = new Set(suspended);
 
   const items = [];
   let subtotal = 0;
@@ -44,7 +49,10 @@ async function decorate(cart) {
     const lineTotal = Math.round(perSack * sacks * 100) / 100;
 
     const needed = weightKg * sacks;
-    const available = Number(product.stock || 0);
+    // A suspended seller's sack stays in the cart, so the buyer sees why it
+    // cannot be bought, but it counts as having nothing left to sell.
+    const sellerSuspended = closed.has(product.createdBy);
+    const available = sellerSuspended ? 0 : Number(product.stock || 0);
 
     items.push({
       productId: String(product._id),
@@ -63,6 +71,7 @@ async function decorate(cart) {
       lineTotal,
       inStock: available >= needed,
       availableStock: available,
+      sellerSuspended,
     });
 
     if (available >= needed) subtotal += lineTotal;
@@ -91,7 +100,9 @@ export const addItem = async (buyerUserId, { productId, weightKg, quantity }) =>
 
   const product = await Product.findById(productId);
   if (!product) throw new Error('Product not found');
-  if (product.status === 'inactive') throw new Error('That product is not for sale right now.');
+  if (product.status === 'inactive' || await isSellerSuspended(product.createdBy)) {
+    throw new Error('That product is not for sale right now.');
+  }
 
   const cart = await cartRepo.getOrCreate(buyerUserId);
   const existing = cart.items.find((i) => sameLine(i, productId, weight));
@@ -167,7 +178,15 @@ export const checkout = async (buyerUserId, {
 
   const view = await decorate(cart);
   if (view.hasUnavailable) {
-    throw new Error(`Out of stock: ${view.unavailable.join(', ')}. Remove them to continue.`);
+    const blocked = view.items.filter((i) => !i.inStock);
+    const closedShop = blocked.filter((i) => i.sellerSuspended).map((i) => i.name);
+    const soldOut = blocked.filter((i) => !i.sellerSuspended).map((i) => i.name);
+
+    throw new Error([
+      closedShop.length && `No longer sold: ${closedShop.join(', ')}.`,
+      soldOut.length && `Out of stock: ${soldOut.join(', ')}.`,
+      'Remove them to continue.',
+    ].filter(Boolean).join(' '));
   }
   if (!deliveryAddress?.trim()) throw new Error('Add a delivery address.');
   if (!customerName?.trim()) throw new Error('Add the name for this delivery.');

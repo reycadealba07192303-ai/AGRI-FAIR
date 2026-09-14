@@ -1,11 +1,9 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
-import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Order from '../models/Order.js';
-import EmailOtp from '../models/EmailOtp.js';
 import { riderService } from '../services/riderService.js';
-import { emailVerificationService } from '../services/passwordResetService.js';
+import { activationService, hashActivationToken } from '../services/activationService.js';
 import { authService } from '../services/authService.js';
 import * as deliveryService from '../services/deliveryService.js';
 import { getFirebaseAuth, initFirebase } from '../config/firebase.js';
@@ -21,7 +19,7 @@ import { getFirebaseAuth, initFirebase } from '../config/firebase.js';
  * real order along, so it is a development tool, not something to point at
  * live data.
  *
- * The activation code is planted rather than emailed: only the hash is stored,
+ * The activation link is planted rather than emailed: only the hash is stored,
  * so a script cannot read the real one.
  */
 
@@ -47,7 +45,7 @@ if (old) {
 
 console.log('1. seller adds a delivery person (name + email only)');
 const rider = await riderService.add(SELLER, { name: 'Mang Tonyo Rider', email: EMAIL });
-console.log('   ->', JSON.stringify({ userId: rider.userId, activated: rider.activated, codeSent: rider.codeSent }));
+console.log('   ->', JSON.stringify({ userId: rider.userId, activated: rider.activated, linkSent: rider.linkSent }));
 
 console.log('2. the account cannot be signed into yet');
 try {
@@ -57,18 +55,23 @@ try {
   console.log('   ->', err.code || '-', '|', err.message);
 }
 
-console.log('3. rider activates with the emailed code and picks a password');
-// Only the hash is stored, so a test plants a code it knows - the same shape
+console.log('3. rider opens the emailed link and picks a password');
+// Only the hash is stored, so a test plants a token it knows - the same shape
 // the real flow writes.
-const code = '654321';
-await EmailOtp.deleteMany({ email: EMAIL, purpose: 'signup' });
-await EmailOtp.create({
-  email: EMAIL,
-  purpose: 'signup',
-  codeHash: await bcrypt.hash(code, 10),
-  expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+const TOKEN = 'check-rider-flow-token';
+await User.updateOne({ email: EMAIL }, {
+  activationTokenHash: hashActivationToken(TOKEN),
+  activationTokenExpires: new Date(Date.now() - 1000),
+  activationSentAt: new Date(Date.now() - 5 * 60 * 1000),
 });
-console.log('   ->', (await emailVerificationService.activateAccount({ email: EMAIL, code, password: PASSWORD })).message);
+console.log('   expired link ->', JSON.stringify(await activationService.status(TOKEN)));
+await User.updateOne({ email: EMAIL }, {
+  activationTokenExpires: new Date(Date.now() + 60 * 60 * 1000),
+});
+console.log('   valid link   ->', JSON.stringify(await activationService.status(TOKEN)));
+console.log('   ->', (await activationService.activate({ token: TOKEN, password: PASSWORD })).message);
+console.log('   opened again ->', JSON.stringify(await activationService.status(TOKEN)));
+console.log('   wrong link   ->', JSON.stringify(await activationService.status('not-a-real-token')));
 
 console.log('4. now the rider can sign in');
 const session = await authService.login({ email: EMAIL, password: PASSWORD });

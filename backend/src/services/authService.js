@@ -42,7 +42,7 @@ function toUserResponse(user, extras = {}) {
   };
 }
 
-function getAppUrl() {
+export function getAppUrl() {
   return (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '');
 }
 
@@ -214,7 +214,16 @@ export const authService = {
     // away. Only sellers wait for Super Admin approval — a buyer has nothing to
     // approve, and leaving 'buyer' off this list silently turned every mobile
     // signup into a pending seller account.
-    const allowedSelfRoles = ['buyer', 'seller', 'superadmin'];
+    //
+    // Super Admin is never self-service. It used to be on this list, so anyone
+    // who posted { role: 'superadmin' } here got the whole platform - hiding the
+    // option on the sign-up form would not have stopped that. Riders are added
+    // by their seller. Both are refused outright rather than quietly turned into
+    // a seller, so nobody believes they signed up as something they did not.
+    if (requestedRole === 'superadmin' || requestedRole === 'rider') {
+      throw new Error('That account type cannot be created by signing up.');
+    }
+    const allowedSelfRoles = ['buyer', 'seller'];
     const role = allowedSelfRoles.includes(requestedRole) ? requestedRole : 'seller';
     const status = role === 'seller' ? 'pending' : 'active';
 
@@ -339,7 +348,9 @@ export const authService = {
     if (!cleanEmail) throw new Error('Email is required');
 
     let user = await authRepository.findByEmail(cleanEmail);
-    if (!user?.firebaseUid) {
+    // A rider who has not activated gets a link, not a code - a code here would
+    // land in their inbox with nowhere to type it.
+    if (!user?.firebaseUid || user.passwordSet === false) {
       // Do not leak whether the email exists
       return { sent: true };
     }
@@ -373,8 +384,8 @@ export const authService = {
     // back "Invalid credentials" - true, and useless. Say what to do instead.
     if (user && user.passwordSet === false) {
       const err = new Error(
-        'This account has not been set up yet. Use the code emailed to you to '
-        + 'choose a password.'
+        'This account has not been set up yet. Open the activation link emailed '
+        + 'to you to choose a password.'
       );
       err.code = 'ACCOUNT_NOT_ACTIVATED';
       err.status = 403;
@@ -428,7 +439,9 @@ export const authService = {
     }
 
     if (user.status === 'suspended') {
-      throw new Error('Your account has been suspended');
+      const err = new Error('Your account has been suspended. Contact AgriFair support.');
+      err.code = 'ACCOUNT_SUSPENDED';
+      throw err;
     }
 
     if (user.role === 'seller' && user.status === 'pending') {

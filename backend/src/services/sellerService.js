@@ -2,6 +2,7 @@ import Product, { STOREFRONT_FILTER } from '../models/Product.js';
 import User from '../models/User.js';
 import { findUserByUserIdSafe } from '../repositories/userRepository.js';
 import { getRatingSummary, getRatingMapForSellers } from '../repositories/reviewRepository.js';
+import { isSellerSuspended } from './sellerAvailability.js';
 
 /**
  * A seller's public face, for a buyer deciding whether to trust them.
@@ -54,7 +55,8 @@ export const sellerService = {
     if (!Number.isFinite(userId)) throw new Error('Invalid seller id');
 
     const user = await findUserByUserIdSafe(userId);
-    if (!user || user.role !== 'seller') {
+    // Suspended is shown to buyers as gone: the shop is closed while it lasts.
+    if (!user || user.role !== 'seller' || user.status === 'suspended') {
       throw new Error('Seller not found');
     }
 
@@ -148,7 +150,9 @@ export const sellerService = {
     if (!Number.isFinite(userId)) throw new Error('Invalid seller id');
 
     const user = await findUserByUserIdSafe(userId);
-    if (!user || user.role !== 'seller') throw new Error('Seller not found');
+    if (!user || user.role !== 'seller' || user.status === 'suspended') {
+      throw new Error('Seller not found');
+    }
 
     const payout = user.payout || {};
 
@@ -197,6 +201,7 @@ export const sellerService = {
    */
   async getPublicProducts(userId) {
     if (!Number.isFinite(userId)) throw new Error('Invalid seller id');
+    if (await isSellerSuspended(userId)) return [];
 
     return Product.find({ createdBy: userId, ...STOREFRONT_FILTER }).sort({
       createdAt: -1,

@@ -17,6 +17,7 @@ class AuthScaffold extends StatelessWidget {
     this.onBack,
     this.footer,
     this.scrollable = false,
+    this.sitLower = false,
   });
 
   final String title;
@@ -27,11 +28,21 @@ class AuthScaffold extends StatelessWidget {
   final Widget? footer;
   final bool scrollable;
 
+  /// Moves the form further down the screen while the keyboard is closed, and
+  /// uses a larger logo set a little lower. For short forms (sign-in) that
+  /// would otherwise leave the bottom empty.
+  final bool sitLower;
+
   static const _logoSize = 68.0;
+  static const _largeLogoSize = 84.0;
 
   @override
   Widget build(BuildContext context) {
-    final brand = _AuthBrand(onBack: onBack, logoSize: _logoSize);
+    final brand = _AuthBrand(
+      onBack: onBack,
+      logoSize: sitLower ? _largeLogoSize : _logoSize,
+      logoGap: sitLower ? 12 : 2,
+    );
     final form = _AuthForm(
       title: title,
       subtitle: subtitle,
@@ -58,12 +69,18 @@ class AuthScaffold extends StatelessWidget {
                         MediaQuery.viewInsetsOf(context).bottom > 0;
                     // Extra top air only when the keyboard is down and the
                     // screen is meant to sit lower (sign-in), not on longer forms.
-                    final topGap = scrollable
+                    var topGap = scrollable
                         ? 28.0
                         : (keyboardOpen
                             ? 20.0
                             : (constraints.maxHeight * 0.12)
                                 .clamp(28.0, 72.0));
+                    // Scaled to the screen, so a small phone gets less and
+                    // the button stays in reach without scrolling.
+                    if (sitLower && !scrollable && !keyboardOpen) {
+                      topGap += (constraints.maxHeight * 0.07)
+                          .clamp(0.0, 52.0);
+                    }
 
                     return SingleChildScrollView(
                       padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
@@ -130,9 +147,16 @@ class AuthScaffold extends StatelessWidget {
 }
 
 class _AuthBrand extends StatelessWidget {
-  const _AuthBrand({required this.logoSize, this.onBack});
+  const _AuthBrand({
+    required this.logoSize,
+    this.logoGap = 2,
+    this.onBack,
+  });
 
   final double logoSize;
+
+  /// Space between the AGRIFAIR wordmark and the logo tile.
+  final double logoGap;
   final VoidCallback? onBack;
 
   @override
@@ -170,15 +194,17 @@ class _AuthBrand extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 2),
+        SizedBox(height: logoGap),
         Center(
           child: Container(
             height: logoSize,
             width: logoSize,
-            padding: const EdgeInsets.all(8),
+            // Padding and corners scale with the tile, so a larger logo keeps
+            // the same proportions as the 68px one (8px padding, 18px radius).
+            padding: EdgeInsets.all(logoSize * 8 / 68),
             decoration: BoxDecoration(
               color: PortalColors.surface,
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(logoSize * 18 / 68),
               boxShadow: PortalClay.raised,
             ),
             child: Image.asset(

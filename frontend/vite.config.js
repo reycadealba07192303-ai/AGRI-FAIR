@@ -10,4 +10,9 @@ export default defineConfig({
       },
     }),
   ],
+  // Listen on the LAN too, so a phone on the same Wi-Fi can open the site -
+  // the rider activation link points at the laptop's IP.
+  server: {
+    host: true,
+  },
 })

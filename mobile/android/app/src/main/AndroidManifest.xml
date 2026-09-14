@@ -39,6 +39,25 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!--
+              agrifair://signin - the "Open the AgriFair app" button a rider
+              taps after creating their password on the web. It only needs to
+              open the app; the app already starts on sign-in when signed out.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="agrifair" android:host="signin"/>
+            </intent-filter>
+            <!--
+              Off, so the link opens the app and nothing more. With it on,
+              Flutter pushes the link's path as a route, which on an app that is
+              already running stacks a second copy of the home screen.
+            -->
+            <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="false" />
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

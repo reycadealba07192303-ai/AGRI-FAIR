@@ -3,7 +3,7 @@ import { UserPlus, Mail, CheckCircle2, Clock, Ban, RotateCcw, RefreshCw } from '
 import {
   fetchRiders,
   addRider,
-  resendRiderCode,
+  resendRiderLink,
   toggleRiderSuspension,
 } from '../../../services/riderApi';
 import './DeliveryPeopleTab.css';
@@ -14,8 +14,8 @@ import './DeliveryPeopleTab.css';
  * A delivery person does not sign themselves up. Their name and email is the
  * whole form — the account is created with a random password nobody is told,
  * not even you, so a seller cannot sign in as their own staff. The rider gets
- * a six-digit code by email and chooses their own password from the delivery
- * portal.
+ * an activation link by email, chooses their own password on the page it
+ * opens, then signs in on the app.
  */
 export default function DeliveryPeopleTab() {
   const [riders, setRiders] = useState([]);
@@ -52,9 +52,9 @@ export default function DeliveryPeopleTab() {
       const res = await addRider(form);
       setForm({ name: '', email: '', contact: '' });
       setNotice(
-        res.data?.codeSent
-          ? `Code sent to ${res.data.email}. They set their own password from the delivery portal.`
-          : `${res.data?.name} was added, but the code could not be emailed. Use "Resend code".`,
+        res.data?.linkSent
+          ? `Activation link sent to ${res.data.email}. They choose their own password from it.`
+          : `${res.data?.name} was added, but the link could not be emailed. Use "Resend link".`,
       );
       await load();
     } catch (err) {
@@ -88,8 +88,9 @@ export default function DeliveryPeopleTab() {
           </div>
 
           <p className="dp-lede">
-            Name and email is all you need. They get a code by email and choose
-            their own password — you never see it, and cannot sign in as them.
+            Name and email is all you need. They get an activation link by email
+            and choose their own password — you never see it, and cannot sign in
+            as them.
           </p>
 
           <form onSubmit={submit} className="dp-form">
@@ -125,7 +126,7 @@ export default function DeliveryPeopleTab() {
 
             <button className="ap-btn-primary" type="submit" disabled={busy === 'add'}>
               <UserPlus size={15} strokeWidth={2.3} />
-              {busy === 'add' ? 'Adding…' : 'Add and send the code'}
+              {busy === 'add' ? 'Adding…' : 'Add and send the link'}
             </button>
           </form>
 
@@ -181,16 +182,16 @@ export default function DeliveryPeopleTab() {
                       <button
                         type="button"
                         className="ap-btn-ghost ap-btn-sm"
-                        disabled={busy === `code-${rider.userId}`}
+                        disabled={busy === `link-${rider.userId}`}
                         onClick={() =>
                           act(
-                            `code-${rider.userId}`,
-                            () => resendRiderCode(rider.userId),
-                            `New code sent to ${rider.email}.`,
+                            `link-${rider.userId}`,
+                            () => resendRiderLink(rider.userId),
+                            `New activation link sent to ${rider.email}. Older links stop working.`,
                           )
                         }
                       >
-                        <Mail size={13} strokeWidth={2.3} /> Resend code
+                        <Mail size={13} strokeWidth={2.3} /> Resend link
                       </button>
                     )}
                     <button

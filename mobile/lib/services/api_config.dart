@@ -6,55 +6,75 @@ import 'package:http/http.dart' as http;
 
 /// Where the backend lives.
 ///
-/// `localhost` on a phone means the phone itself, not the laptop running the
-/// server - the single most common reason the app "cannot reach the server"
-/// while the same URL works fine in a browser. There is no one address that is
-/// right for every way of running this, so instead of asking the person to
-/// remember a build flag, the app asks each candidate which one answers.
+/// Hosts and secrets are never hardcoded here. Pass them at build/run time:
+///
+///   flutter run --dart-define-from-file=dart_defines.json
+///
+/// See `dart_defines.json.example`. Local `dart_defines.json` is gitignored.
 class ApiConfig {
-  /// Skip the search entirely and use this exact URL:
-  ///   flutter run --dart-define=API_BASE_URL=http://192.168.1.14:8080/api
+  /// Skip probing and use this exact URL:
+  ///   --dart-define=API_BASE_URL=https://….up.railway.app/api
   static const String _override = String.fromEnvironment('API_BASE_URL');
+
+  /// Optional cloud/production API (must end with `/api`).
+  static const String _cloudHost = String.fromEnvironment('API_CLOUD_URL');
+
+  /// Optional LAN IP of the laptop (no scheme), e.g. `192.168.1.14`.
+  static const String _lanHost = String.fromEnvironment('LAN_HOST');
 
   /// Force the USB tunnel (`adb reverse tcp:8080 tcp:8080`):
   ///   flutter run --dart-define=USE_ADB=true
   static const bool _useAdb = bool.fromEnvironment('USE_ADB');
 
-  /// Force [lanHost], for a phone on the same Wi-Fi as the laptop:
+  /// Force LAN only:
   ///   flutter run --dart-define=USE_LAN=true
   static const bool _useLan = bool.fromEnvironment('USE_LAN');
 
   static const int port = 8080;
 
-  /// The laptop's address on Wi-Fi. DHCP hands out a new one when the network
-  /// changes, so when nothing else works, check this with `ipconfig` and look
-  /// at the Wi-Fi adapter's IPv4 address.
-  static const String lanHost = '10.88.125.230';
-
   static String _localhost() => 'http://localhost:$port/api';
   static String _emulator() => 'http://10.0.2.2:$port/api';
-  static String _lan() => 'http://$lanHost:$port/api';
+  static String? _lan() {
+    if (_lanHost.isEmpty) return null;
+    return 'http://$_lanHost:$port/api';
+  }
+
+  static String? get _cloud => _cloudHost.isEmpty ? null : _cloudHost;
 
   /// Every address worth trying, best first.
-  ///
-  /// The USB tunnel leads because it is the one that does not care which
-  /// network the phone is on; the emulator address follows because it is free
-  /// to test and instantly right when running in an emulator; the Wi-Fi
-  /// address is last because it is the one that goes stale.
   static List<String> get _candidates {
     if (_override.isNotEmpty) return [_override];
     if (_useAdb) return [_localhost()];
-    if (_useLan) return [_lan()];
 
-    if (kIsWeb) return [_localhost()];
-
-    if (Platform.isAndroid) {
-      return [_localhost(), _emulator(), _lan()];
+    final lan = _lan();
+    if (_useLan) {
+      if (lan == null) {
+        throw StateError(
+          'USE_LAN=true needs LAN_HOST in dart_defines.json '
+          '(or --dart-define=LAN_HOST=…)',
+        );
+      }
+      return [lan];
     }
 
-    // iOS simulator shares the Mac's network stack, so localhost is right; a
-    // real iPhone still needs the LAN address.
-    return [_localhost(), _lan()];
+    final out = <String>[];
+    final cloud = _cloud;
+    if (cloud != null) out.add(cloud);
+
+    if (kIsWeb) {
+      out.add(_localhost());
+      return out.isEmpty ? [_localhost()] : out;
+    }
+
+    if (Platform.isAndroid) {
+      out.addAll([_localhost(), _emulator()]);
+      if (lan != null) out.add(lan);
+      return out.isEmpty ? [_localhost(), _emulator()] : out;
+    }
+
+    out.add(_localhost());
+    if (lan != null) out.add(lan);
+    return out.isEmpty ? [_localhost()] : out;
   }
 
   static String? _resolved;
@@ -65,16 +85,12 @@ class ApiConfig {
   static String get baseUrl => _resolved ?? _candidates.first;
 
   /// Finds the first address that answers, and remembers it.
-  ///
-  /// Runs at most once per app launch; concurrent callers share the same
-  /// attempt rather than each probing on their own.
   static Future<String> resolve() {
     if (_resolved != null) return Future.value(_resolved);
     return _resolving ??= _probe();
   }
 
-  /// Forgets the answer, so the next call searches again. Used when a request
-  /// fails outright - the laptop may have moved, or the cable been unplugged.
+  /// Forgets the answer, so the next call searches again.
   static void forget() {
     _resolved = null;
     _resolving = null;
@@ -83,8 +99,6 @@ class ApiConfig {
   static Future<String> _probe() async {
     final candidates = _candidates;
 
-    // A single candidate is not worth a round trip to confirm; if it is wrong,
-    // the real request will say so with a better message than a probe could.
     if (candidates.length == 1) {
       _resolved = candidates.first;
       debugPrint('[agrifair] using ${_resolved!}');
@@ -100,15 +114,11 @@ class ApiConfig {
       debugPrint('[agrifair] no answer from $candidate');
     }
 
-    // Nothing answered. Settle on the first so the failure the person sees
-    // comes from a real request, naming an address, rather than from here.
     _resolved = candidates.first;
     debugPrint('[agrifair] nothing answered; falling back to ${_resolved!}');
     return _resolved!;
   }
 
-  /// The API root is a plain JSON reply that touches no database, so this
-  /// costs the server nothing and cannot be slowed down by a cold query.
   static Future<bool> _answers(String base) async {
     try {
       final response = await http

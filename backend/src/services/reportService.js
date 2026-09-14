@@ -189,7 +189,7 @@ export const emailReport = async (sellerId, type) => {
 
   if (!isMailConfigured()) {
     throw new Error(
-      'Email is not set up yet. Add SMTP_HOST, SMTP_USER and SMTP_PASS to backend/.env, then restart the server.'
+      'Email is not set up yet. Add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN (or SMTP_HOST, SMTP_USER and SMTP_PASS) to backend/.env, then restart the server.'
     );
   }
 

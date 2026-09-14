@@ -163,40 +163,6 @@ class AuthService {
     return _messageFrom(body, 'Password updated.');
   }
 
-  /// Step one for a delivery rider: is there an account for this email?
-  ///
-  /// Answers honestly, and sends the code to that mailbox. A rider who
-  /// mistypes the address their shop gave them should be told, not left
-  /// waiting for an email that was never coming.
-  ///
-  /// Returns the name on the account, so the next screen can greet them.
-  Future<String> startDeliverySetup(String email) async {
-    final body = await _api.post('/auth/delivery/start', {'email': email.trim()});
-
-    return body is Map<String, dynamic>
-        ? (body['name'] ?? '').toString()
-        : '';
-  }
-
-  /// Step three: the code proves the address, and sets the chosen password.
-  ///
-  /// One call, so a half-finished attempt leaves nothing behind.
-  Future<String> activateAccount({
-    required String email,
-    required String code,
-    required String password,
-  }) async {
-    final body = await _api.post('/auth/activate', {
-      'email': email.trim(),
-      'code': code.trim(),
-      'password': password,
-    });
-
-    return body is Map<String, dynamic>
-        ? (body['message'] ?? 'Account ready.').toString()
-        : 'Account ready.';
-  }
-
   Future<AuthUser> me() async {
     final body = await _api.get('/user/me');
     return AuthUser.fromJson(body as Map<String, dynamic>);

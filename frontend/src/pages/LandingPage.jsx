@@ -4,6 +4,8 @@ import './LandingPage.css';
 import logoImg from '../assets/logo.png';
 import riceGrain from '../assets/rice_grain_3d.png';
 import riceStalk from '../assets/rice_stalk_hero.png';
+import QRCode from 'qrcode';
+import { APP_DOWNLOAD_URL } from '../utils/appLinks';
 
 const FEATURES = [
   {
@@ -68,17 +70,27 @@ const HOW_TO_STEPS = [
   },
 ];
 
-/** APK / Play Store URL — override with VITE_APP_DOWNLOAD_URL in .env when needed. */
-const APP_DOWNLOAD_URL =
-  import.meta.env.VITE_APP_DOWNLOAD_URL?.trim() ||
-  'https://drive.google.com/file/d/103PzpjBsiWU0bW8iLgqojdNuYaMCk6bQ/view?usp=sharing';
-
 export default function LandingPage() {
   const navigate = useNavigate();
   const heroRef = useRef(null);
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [qrSrc, setQrSrc] = useState('');
   const downloadUrl = APP_DOWNLOAD_URL;
+
+  // Drawn from the live download link rather than a saved picture, so the QR
+  // can never point at an old host after the APK moves.
+  useEffect(() => {
+    if (!downloadOpen || qrSrc) return;
+    QRCode.toDataURL(downloadUrl, {
+      width: 400,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#122112', light: '#ffffff' },
+    })
+      .then(setQrSrc)
+      .catch(() => setQrSrc(''));
+  }, [downloadOpen, downloadUrl, qrSrc]);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -391,18 +403,20 @@ export default function LandingPage() {
             <p className="lp-dl-modal-hint">
               Scan the QR with your phone, or tap Download here.
             </p>
-            <img
-              className="lp-dl-modal-qr"
-              src="/app-preview/apk-qr.png"
-              alt="QR code to download AgriFair"
-              width={200}
-              height={200}
-            />
+            {qrSrc ? (
+              <img
+                className="lp-dl-modal-qr"
+                src={qrSrc}
+                alt="QR code to download AgriFair"
+                width={200}
+                height={200}
+              />
+            ) : (
+              <div className="lp-dl-modal-qr" style={{ width: 200, height: 200 }} aria-hidden="true" />
+            )}
             <a
               className="lp-dl-modal-download-link"
               href={downloadUrl}
-              target="_blank"
-              rel="noopener noreferrer"
             >
               DOWNLOAD HERE
             </a>
@@ -430,8 +444,17 @@ export default function LandingPage() {
             </p>
           </div>
           <div className="lp-video-container">
-            <video className="lp-video-element" controls poster="https://placehold.co/900x500/1a2e1a/c9a84c?text=AgriFair+Video&font=playfair-display">
-              <source src="https://www.w3schools.com/html/mov_bbb.mp4" type="video/mp4" />
+            {/* Served from /public, so it ships with the site instead of
+                depending on a third-party host. preload="metadata" keeps the
+                landing page light until someone presses play. */}
+            <video
+              className="lp-video-element"
+              controls
+              playsInline
+              preload="metadata"
+              poster="/media/agrifair-highlights-poster.jpg"
+            >
+              <source src="/media/agrifair-highlights.mp4" type="video/mp4" />
               Your browser does not support the video tag.
             </video>
           </div>

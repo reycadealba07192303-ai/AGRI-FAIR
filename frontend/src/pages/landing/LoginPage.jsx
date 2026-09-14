@@ -24,6 +24,12 @@ export default function LoginPage() {
         message: 'Email verified successfully. You can sign in now.'
       });
     }
+    if (searchParams.get('suspended') === '1') {
+      setAlert({
+        type: 'error',
+        message: 'Your account has been suspended, so you were signed out. Contact AgriFair support.'
+      });
+    }
   }, [searchParams]);
 
   const handleChange = (e) => {

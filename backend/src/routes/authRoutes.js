@@ -6,8 +6,9 @@ import {
   logout,
   resendVerification,
   verifyEmailOtp,
+  activationStatus,
   activateAccount,
-  startDeliverySetup,
+  resendActivation,
   forgotPassword,
   verifyResetOtp,
   resetPassword
@@ -26,11 +27,12 @@ router.post('/resend-verification', otpRequestLimiter, resendVerification);
 router.post('/forgot-password', otpRequestLimiter, forgotPassword);
 
 router.post('/verify-email-otp', otpSubmitLimiter, verifyEmailOtp);
-// A delivery person setting up the account their shop made for them. The
-// first call says whether there is one and sends the code; the second sets the
-// password once the code checks out.
-router.post('/delivery/start', otpRequestLimiter, startDeliverySetup);
+// A delivery person setting up the account their shop made for them, from the
+// emailed link. Checking the link and submitting the password are cheap;
+// asking for a new link sends mail, so it shares the request budget.
+router.post('/activate/status', otpSubmitLimiter, activationStatus);
 router.post('/activate', otpSubmitLimiter, activateAccount);
+router.post('/activate/resend', otpRequestLimiter, resendActivation);
 router.post('/verify-reset-otp', otpSubmitLimiter, verifyResetOtp);
 router.post('/reset-password', otpSubmitLimiter, resetPassword);
 

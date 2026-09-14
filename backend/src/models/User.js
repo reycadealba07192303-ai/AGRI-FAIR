@@ -75,11 +75,24 @@ const userSchema = new mongoose.Schema({
    * Whether this account has a password its owner chose.
    *
    * A rider's account is created by their seller with a random one they are
-   * never told, so it stays false until they activate the account with the
-   * emailed code. Sign-in is refused until then - otherwise an account exists
+   * never told, so it stays false until they activate the account from the
+   * emailed link. Sign-in is refused until then - otherwise an account exists
    * that nobody can get into and nobody can tell why.
    */
   passwordSet: { type: Boolean, default: true },
+
+  /**
+   * The link a rider activates their account from.
+   *
+   * Only a SHA-256 of the token is kept, so a copy of the database cannot be
+   * turned into working links. The hash outlives its expiry on purpose: an
+   * expired link still has to say whose it was, so the page can offer to send
+   * a fresh one to the address on the account. A new link overwrites it, which
+   * is what retires the old one.
+   */
+  activationTokenHash: { type: String, index: true, sparse: true, select: false },
+  activationTokenExpires: { type: Date, default: null },
+  activationSentAt: { type: Date, default: null },
   status: {
     type: String,
     enum: ['active', 'suspended', 'pending'],

@@ -1,5 +1,6 @@
 // src/repositories/productRepository.js
 import Product, { STOREFRONT_FILTER } from '../models/Product.js';
+import { excludeSuspendedSellers } from '../services/sellerAvailability.js';
 
 export const productRepository = {
 
@@ -9,8 +10,11 @@ export const productRepository = {
 
     // Sold out and taken-down listings are hidden by default. The seller's own
     // tools ask for them explicitly - they are the ones who need to see what
-    // has run out.
-    const query = filters.includeSoldOut ? {} : { ...STOREFRONT_FILTER };
+    // has run out. A suspended seller's listings are hidden either way.
+    const query = {
+      ...(filters.includeSoldOut ? {} : STOREFRONT_FILTER),
+      ...(await excludeSuspendedSellers()),
+    };
 
     // Apply filters
     // The schema field is `variety`; accepting `category` too keeps the mobile
@@ -74,6 +78,7 @@ export const productRepository = {
     return await Product.find({
       variety,
       ...(includeSoldOut ? {} : STOREFRONT_FILTER),
+      ...(await excludeSuspendedSellers()),
     }).sort({ createdAt: -1 });
   },
 
@@ -106,6 +111,7 @@ export const productRepository = {
   async searchProducts(searchTerm, { includeSoldOut = false } = {}) {
     return await Product.find({
       ...(includeSoldOut ? {} : STOREFRONT_FILTER),
+      ...(await excludeSuspendedSellers()),
       $or: [
         { name: { $regex: searchTerm, $options: 'i' } },
         { description: { $regex: searchTerm, $options: 'i' } }

@@ -27,12 +27,6 @@ class ApiException implements Exception {
   bool get isUnauthorized => statusCode == 401;
   bool get isEmailNotVerified => code == 'EMAIL_NOT_VERIFIED';
 
-  /// An account a seller created whose owner has not claimed it yet.
-  ///
-  /// Not a wrong password - there is no password anybody knows. The screen
-  /// sends them to set one rather than leaving them retyping.
-  bool get isNotActivated => code == 'ACCOUNT_NOT_ACTIVATED';
-
   @override
   String toString() => message;
 }

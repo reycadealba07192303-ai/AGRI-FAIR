@@ -14,8 +14,8 @@ export const fetchRiders = () => API.get('/riders');
 /** name + email is the whole form. The rider picks their own password later. */
 export const addRider = (data) => API.post('/riders', data);
 
-export const resendRiderCode = (riderUserId) =>
-  API.post(`/riders/${riderUserId}/resend-code`);
+export const resendRiderLink = (riderUserId) =>
+  API.post(`/riders/${riderUserId}/resend-link`);
 
 /** Toggles between active and suspended — never deletes. Their name is on
  *  delivered orders, and removing the account would orphan those. */
@@ -42,20 +42,18 @@ export const uploadDeliveryProof = (orderId, file, note) => {
   });
 };
 
-// ---- Finishing an account somebody else created ----
+// ---- Finishing an account somebody else created, from the emailed link ----
+
+/** valid | expired | active | suspended | invalid — one screen for each. */
+export const fetchActivationStatus = (token) =>
+  API.post('/auth/activate/status', { token });
+
+export const activateAccount = ({ token, password }) =>
+  API.post('/auth/activate', { token, password });
 
 /**
- * Step one: is there a delivery account for this email, and send the code.
- *
- * Answers honestly whether one exists — a rider who mistypes the address their
- * shop gave them should be told, not left waiting for an email that was never
- * coming.
+ * A new link from an expired one. Only the token is sent: the new link goes to
+ * the address already on the account, never to one typed here.
  */
-export const startDeliverySetup = (email) =>
-  API.post('/auth/delivery/start', { email });
-
-export const activateAccount = ({ email, code, password }) =>
-  API.post('/auth/activate', { email, code, password });
-
-export const resendActivationCode = (email) =>
-  API.post('/auth/resend-verification', { email });
+export const resendActivationLink = (token) =>
+  API.post('/auth/activate/resend', { token });

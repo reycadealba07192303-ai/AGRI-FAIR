@@ -308,34 +308,52 @@ na pinagtatrabahuhan nila.
 
 ```
 Seller: pangalan + email  ->  account (random password na walang nakakaalam)
-                          ->  6-digit code sa email
+                          ->  activation link sa email (48 oras)
 
-Rider sa sign-in (app at web): "Signing in as a delivery rider?"
-  1. email lang        ->  may account ba? -> ipinapadala ang code
-  2. gumawa ng password
-  3. i-verify gamit ang code  ->  pwede nang mag-sign in
+Rider: bubuksan ang link  ->  web /activate?token=...
+  password + confirm  ->  Activate  ->  sign in sa app gaya ng dati
 ```
 
-**Email muna bago lahat.** Tinitingnan kung may account bago pa may hingiin na
-kahit ano — ang rider na namali ng type sa email na ibinigay ng shop niya ay
-dapat masabihan, hindi iwang naghihintay ng email na hindi naman darating.
+**Link, hindi code.** Ang pagbukas ng link mula sa email ay nagpapatunay na nya
+ang may-ari ng address, kaya ang natitirang tanong ay ang password lang.
+Dati ay tatlong hakbang sa loob ng app (email → password → OTP) sa likod ng
+"Signing in as a delivery rider?" sa sign-in screen. **Tinanggal** iyon: ang
+rider ay nagsa-sign in sa parehong form gaya ng lahat, at ang setup ay nasa
+email/web.
 
-Sinasabi ito nang tapat kung may account nga: **sadyang kaiba** ito sa
-forgot-password, na hindi nagsasabi kung rehistrado ang isang email. Ang
-napapala ng nag-uusisa ay maliit — walang password ang account na iyon na alam
-ninuman, at kailangan pa rin nila ang code sa mismong mailbox. Naka-rate limit
-ito gaya ng lahat ng humihingi ng code.
+**Hash lang ng token ang nakatago** (SHA-256 — 256 random bits, at kailangan
+hanapin ayon sa hash, kaya hindi bcrypt). Ang kopya ng database ay hindi
+magiging mga link na gumagana.
 
-**Hawak muna ang password hanggang tumama ang code.** Isang tawag lang ang
-nagse-set nito, kaya ang hindi natapos na pagsubok ay walang naiiwan.
+**Hindi nag-activate ang pagbukas ng page.** Sinusundan ng mail scanners ang
+mga link para suriin, kaya ang pag-submit ng password lang ang nagbabago sa
+account.
+
+**Bawat link ay may screen:** `valid` (password), `expired` (resend),
+`active` (sign in sa app), `suspended`, `invalid` (na-replace ng mas bagong
+link, o hindi kailanman link).
+
+**Resend mula sa expired na link.** Ang token ang ipinapadala, hindi email na
+tinype — kaya ang bagong link ay pwede lang mapunta sa address na nasa
+account. Dahil dito, ang hash ay **hindi binubura sa pag-expire**; ang bagong
+link ay nag-o-overwrite dito, at iyon ang nagpapatay sa dati. 60 segundo na
+cooldown kada account (backend), para seller at rider pareho.
 
 **Hindi kailanman nalalaman ng seller ang password.** Random ito at itinatapon
-— hindi dapat kayang mag-sign in ng seller bilang tauhan niya. Ang rider ang
-pumipili nito sa `/activate`, kapareho ng OTP na natatanggap ng lahat.
+— hindi dapat kayang mag-sign in ng seller bilang tauhan niya.
 
 Tinatanggihan ang pag-sign in bago ma-activate, at **sinasabi kung bakit**:
-`ACCOUNT_NOT_ACTIVATED`, hindi "Invalid credentials" — totoo iyon pero walang
-silbi.
+`ACCOUNT_NOT_ACTIVATED` ("Open the activation link emailed to you"), hindi
+"Invalid credentials" — totoo iyon pero walang silbi.
+
+**Nahuling bug sa pagsasalin:** ang dati na activate ay nag-hash ng password
+bago `save()`, at ang pre-save hook ay nag-hash ulit. Hash ng hash — ang
+offline fallback ay hindi kailanman tumama. Plain text ngayon; ang hook ang
+nag-hash.
+
+**`APP_URL` ay dapat buksan sa phone.** Ang link ay `APP_URL/activate`, at ang
+default ay `localhost:5173` — sa phone, ang `localhost` ay ang phone mismo.
+Sa demo sa LAN: `APP_URL=http://<IP ng laptop>:5173` at `vite --host`.
 
 **Ang pag-assign ang nagbubukas ng order, hindi ang pagtatrabaho.** Ang rider
 ay nakakakita lang ng order na nakapangalan sa kanya. Ang naghahatid para sa
@@ -343,7 +361,7 @@ isang tindahan ay walang dapat makita sa ibang tindahan.
 
 | Sino | Ano ang kaya |
 |---|---|
-| Seller | Magdagdag, mag-resend ng code, mag-suspend, mag-assign kada order |
+| Seller | Magdagdag, mag-resend ng link, mag-suspend, mag-assign kada order |
 | Rider | Makita ang naka-assign, mag-share ng posisyon, mag-upload ng patunay |
 
 **Nasa mobile app na rin ang rider.** May sariling screen na siya
@@ -572,7 +590,7 @@ Kailangan ng `--run-skipped`. Kung wala ito, mananaig ang `skip` sa
 
 | Suite | Bilang | Kailangan |
 |---|---|---|
-| `flutter test` (untagged) | 62 | wala |
+| `flutter test` (untagged) | 60 | wala |
 | `chat_test.dart` | 11 | `chat@agrifair.invalid`, seller na may stock |
 | `cart_test.dart` | 10 | `cart@agrifair.invalid` |
 | `delivery_test.dart` | 7 | `chat@agrifair.invalid`, seller na may naka-set na `pickupLat/Lng` |

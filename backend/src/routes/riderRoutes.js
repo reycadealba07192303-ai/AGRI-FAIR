@@ -20,8 +20,8 @@ const sellerOnly = authorizeRoles('seller', 'superadmin');
 
 router.get('/', sellerOnly, handle((req) => riderService.list(req.user.userId)));
 router.post('/', sellerOnly, handle((req) => riderService.add(req.user.userId, req.body || {})));
-router.post('/:riderUserId/resend-code', sellerOnly, handle((req) =>
-  riderService.resendCode(req.user.userId, req.params.riderUserId)));
+router.post('/:riderUserId/resend-link', sellerOnly, handle((req) =>
+  riderService.resendLink(req.user.userId, req.params.riderUserId)));
 router.put('/:riderUserId/suspend', sellerOnly, handle((req) =>
   riderService.suspend(req.user.userId, req.params.riderUserId)));
 

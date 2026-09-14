@@ -803,6 +803,10 @@
 
 .lp-video-element {
   width: 100%;
+  /* The highlight video is 16:9; reserving the box keeps the page from jumping
+     when the poster loads. */
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
   border-radius: var(--radius);
   display: block;
   background: var(--green-900);

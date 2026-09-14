@@ -1,5 +1,6 @@
 import { authService } from '../services/authService.js';
 import { passwordResetService, emailVerificationService } from '../services/passwordResetService.js';
+import { activationService } from '../services/activationService.js';
 import { getIo } from '../sockets/socket.js';
 
 /** Never let the client fall back to a bare "Login failed" - always send real text. */
@@ -11,7 +12,8 @@ function fail(res, status, err, fallback) {
     // Only set for failures a client should handle rather than just display -
     // an unverified email sends the app to the code screen, not to an alert.
     ...(err?.code ? { code: err.code } : {}),
-    ...(err?.email ? { email: err.email } : {})
+    ...(err?.email ? { email: err.email } : {}),
+    ...(err?.retryAfter ? { retryAfter: err.retryAfter } : {})
   });
 }
 
@@ -143,27 +145,38 @@ export const verifyEmailOtp = async (req, res) => {
 };
 
 /**
- * Step one for a delivery person: confirms the account exists and emails the
- * code, so the app knows whether to offer the create-password step.
+ * What an activation link is: valid, expired, already used, or not a link at
+ * all. Posted rather than read from the query string, so the token does not
+ * end up in request logs.
  */
-export const startDeliverySetup = async (req, res) => {
+export const activationStatus = async (req, res) => {
   try {
-    const result = await emailVerificationService.startDeliverySetup(req.body);
+    const result = await activationService.status(req.body?.token);
     return res.status(200).json({ success: true, ...result });
   } catch (err) {
-    return fail(res, 400, err, 'Could not find that delivery account');
+    return fail(res, 400, err, 'Could not check this link');
   }
 };
 
 /**
  * Finishes an account created by somebody else - a rider's, made by their
- * seller. One call: the code proves the address, the password is set.
+ * seller. The link proved the address; this sets the password they chose.
  */
 export const activateAccount = async (req, res) => {
   try {
-    const result = await emailVerificationService.activateAccount(req.body);
+    const result = await activationService.activate(req.body || {});
     return res.status(200).json({ success: true, ...result });
   } catch (err) {
     return fail(res, 400, err, 'Could not set up this account');
+  }
+};
+
+/** A new link, from an expired one, to the address already on the account. */
+export const resendActivation = async (req, res) => {
+  try {
+    const result = await activationService.resendFromLink(req.body || {});
+    return res.status(200).json({ success: true, ...result });
+  } catch (err) {
+    return fail(res, err?.code === 'RESEND_COOLDOWN' ? 429 : 400, err, 'Could not send a new link');
   }
 };

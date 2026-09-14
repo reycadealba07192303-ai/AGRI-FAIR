@@ -37,6 +37,9 @@ mobile/**/GoogleService-Info.plist
 mobile/android/.gradle/
 mobile/android/.kotlin/
 
+# Local API hosts / dart-defines (never commit real Railway / LAN values)
+mobile/dart_defines.json
+
 # --- hindi na kailangan sa public repo ---
 # Stray na kopya sa root. Walang gumagamit nito: ang backend ay ang admin SDK
 # key ang binabasa, at ang Flutter app ay sa mobile/android/app/ hahanap. Ang

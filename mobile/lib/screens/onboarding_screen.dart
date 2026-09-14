@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -331,7 +332,7 @@ class _TopBar extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
-              Flexible(
+              Expanded(
                 child: Text(
                   'AgriFair',
                   style: portalDisplay(
@@ -341,30 +342,74 @@ class _TopBar extends StatelessWidget {
                   ),
                 ),
               ),
-              const Spacer(),
-              TextButton(
-                onPressed: onSkip,
-                style: TextButton.styleFrom(
-                  foregroundColor: Colors.white,
-                  backgroundColor: Colors.white.withValues(alpha: 0.12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  'Skip',
-                  style: portalBody(
-                    size: 13,
-                    weight: FontWeight.w700,
-                    color: PortalColors.white,
+              const SizedBox(width: 12),
+              _SkipButton(onTap: onSkip),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Frosted glass over the photo, so it reads on a bright slide and a dark one
+/// alike. A flat tint turned into a muddy grey box on the lighter photos.
+class _SkipButton extends StatelessWidget {
+  const _SkipButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final shape = BorderRadius.circular(999);
+
+    return Semantics(
+      button: true,
+      label: 'Skip introduction',
+      child: ClipRRect(
+        borderRadius: shape,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: PortalColors.green950.withValues(alpha: 0.28),
+            shape: RoundedRectangleBorder(
+              borderRadius: shape,
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.32)),
+            ),
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: shape,
+              splashColor: Colors.white.withValues(alpha: 0.16),
+              highlightColor: Colors.white.withValues(alpha: 0.08),
+              child: ConstrainedBox(
+                // A thumb-sized target, even though the pill looks smaller.
+                constraints: const BoxConstraints(minHeight: 40, minWidth: 76),
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 10, 0),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Skip',
+                        style: portalBody(
+                          size: 13.5,
+                          weight: FontWeight.w700,
+                          color: PortalColors.white,
+                          height: 1,
+                        ).copyWith(letterSpacing: 0.2),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 18,
+                        color: PortalColors.white,
+                      ),
+                    ],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
         ),
       ),

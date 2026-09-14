@@ -33,6 +33,11 @@ const allowedOrigins = (process.env.CORS_ORIGINS || '')
 const isLoopbackOrigin = (origin) =>
   /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(origin);
 
+// The laptop's own address on home/school Wi-Fi, so the web app opened from a
+// phone during development can reach the API. Development only, like loopback.
+const isPrivateLanOrigin = (origin) =>
+  /^https?:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/.test(origin);
+
 // Preview + production Vercel hosts (https://app.vercel.app, https://app-git-main-user.vercel.app).
 const isVercelOrigin = (origin) => {
   try {
@@ -50,7 +55,8 @@ export const corsOrigin = (origin, callback) => {
   if (!origin) return callback(null, true);
   if (allowedOrigins.includes(origin)) return callback(null, true);
   if (isVercelOrigin(origin)) return callback(null, true);
-  if (process.env.NODE_ENV !== 'production' && isLoopbackOrigin(origin)) {
+  if (process.env.NODE_ENV !== 'production'
+    && (isLoopbackOrigin(origin) || isPrivateLanOrigin(origin))) {
     return callback(null, true);
   }
   console.warn('[cors] blocked origin:', origin);

@@ -11,7 +11,6 @@ export default function RegisterPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'seller',
   });
   const [errors, setErrors] = useState({});
   const [loading, setLoading] = useState(false);
@@ -44,10 +43,6 @@ export default function RegisterPage() {
       errs.confirmPassword = 'Passwords do not match';
     }
 
-    if (!['seller', 'superadmin'].includes(formData.role)) {
-      errs.role = 'Please select a role';
-    }
-
     return errs;
   };
 
@@ -74,7 +69,10 @@ export default function RegisterPage() {
         name: `${formData.firstName.trim()} ${formData.lastName.trim()}`,
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        role: formData.role,
+        // The web sign-up is for business sellers only. Super Admins are made
+        // by another Super Admin, buyers sign up in the app, riders are added
+        // by their seller.
+        role: 'seller',
       });
 
       setAwaitingVerification(true);
@@ -112,7 +110,7 @@ export default function RegisterPage() {
             Grow smarter fairs.
           </h2>
           <p className="auth-brand-desc">
-            Set up your AgriFair admin account and unlock event tools, seller coordination, and live reports.
+            Set up your AgriFair seller account to list your rice, take orders, and follow your sales.
           </p>
 
           <div className="auth-brand-stats-card">
@@ -152,9 +150,7 @@ export default function RegisterPage() {
               <h1 className="auth-v2-title">Check your Gmail.</h1>
               <p className="auth-v2-subtitle">
                 We sent a verification link to <strong>{formData.email}</strong>.
-                {formData.role === 'superadmin'
-                  ? ' After verifying, you can sign in to the Super Admin portal.'
-                  : ' After verifying, wait for Super Admin approval, then sign in on the seller portal.'}
+                {' '}After verifying, wait for Super Admin approval, then sign in on the seller portal.
               </p>
 
               {alert.message && (
@@ -180,10 +176,10 @@ export default function RegisterPage() {
             </>
           ) : (
             <>
-          <div className="auth-v2-label">Create Account</div>
+          <div className="auth-v2-label">Seller Registration</div>
           <h1 className="auth-v2-title">Create account.</h1>
           <p className="auth-v2-subtitle">
-            Choose your role and register for AgriFair — Super Admins oversee the platform, Sellers manage their business.
+            Register your rice business on AgriFair. After you verify your email, a Super Admin reviews your account before you can start selling.
           </p>
 
               {alert.message && (
@@ -283,29 +279,6 @@ export default function RegisterPage() {
                     </div>
                     {errors.confirmPassword && <span className="auth-v2-error">{errors.confirmPassword}</span>}
                   </div>
-                </div>
-
-                <div className={`auth-v2-field ${errors.role ? 'has-error' : ''}`}>
-                  <label htmlFor="role">Account role</label>
-                  <div className="auth-v2-input-wrap auth-v2-select-wrap">
-                    <select
-                      id="role"
-                      name="role"
-                      className="auth-v2-select"
-                      value={formData.role}
-                      onChange={handleChange}
-                      disabled={loading}
-                    >
-                      <option value="seller">Seller — Business owner</option>
-                      <option value="superadmin">Super Admin — Platform operator</option>
-                    </select>
-                  </div>
-                  <span className="auth-v2-help">
-                    {formData.role === 'superadmin'
-                      ? 'Super Admin accounts can access the full platform portal after email verification.'
-                      : 'Seller accounts need Super Admin approval after email verification.'}
-                  </span>
-                  {errors.role && <span className="auth-v2-error">{errors.role}</span>}
                 </div>
 
                 <button type="submit" className="auth-v2-submit" disabled={loading}>

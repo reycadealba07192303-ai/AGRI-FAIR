@@ -9,7 +9,6 @@ import '../services/auth_service.dart';
 import '../theme/portal_theme.dart';
 import '../widgets/auth_scaffold.dart';
 import 'forgot_password_screen.dart';
-import 'delivery_setup_screen.dart';
 import 'main_screen.dart';
 import 'otp_verification_screen.dart';
 import 'rider_home_screen.dart';
@@ -61,12 +60,8 @@ class _SignInScreenState extends State<SignInScreen> {
         return;
       }
 
-      if (err.isNotActivated) {
-        _notify(err.message);
-        _setUpDeliveryAccount();
-        return;
-      }
-
+      // A rider who has not activated yet is told to open the emailed link;
+      // setting up happens there, not in the app.
       _notify(err.message);
     }
   }
@@ -84,19 +79,6 @@ class _SignInScreenState extends State<SignInScreen> {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => const MainScreen()),
     );
-  }
-
-  Future<void> _setUpDeliveryAccount() async {
-    final email = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) => DeliverySetupScreen(
-          initialEmail: _emailController.text.trim(),
-        ),
-      ),
-    );
-
-    if (email == null || !mounted) return;
-    setState(() => _emailController.text = email);
   }
 
   void _goToVerification(String email, String message) {
@@ -124,6 +106,7 @@ class _SignInScreenState extends State<SignInScreen> {
     return AuthScaffold(
       title: 'Welcome Back',
       subtitle: 'Sign in to continue to AgriFair',
+      sitLower: true,
       onBack: Navigator.of(context).canPop()
           ? () => Navigator.of(context).maybePop()
           : null,
@@ -229,10 +212,6 @@ class _SignInScreenState extends State<SignInScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        _orRule(),
-        const SizedBox(height: 12),
-        _delivererRow(),
       ],
     );
   }
@@ -247,86 +226,6 @@ class _SignInScreenState extends State<SignInScreen> {
           weight: FontWeight.w700,
           color: PortalColors.textDark,
         ),
-      ),
-    );
-  }
-
-  Widget _orRule() {
-    return Row(
-      children: [
-        const Expanded(child: Divider(color: Color(0xFFCBD5C6), height: 1)),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          child: Text(
-            'OR',
-            style: portalBody(
-              size: 11,
-              weight: FontWeight.w700,
-              color: PortalColors.textMuted,
-            ).copyWith(letterSpacing: 1.6),
-          ),
-        ),
-        const Expanded(child: Divider(color: Color(0xFFCBD5C6), height: 1)),
-      ],
-    );
-  }
-
-  Widget _delivererRow() {
-    return AuthClayWell(
-      onTap: _isLoading ? null : _setUpDeliveryAccount,
-      child: Row(
-        children: [
-          Container(
-            height: 42,
-            width: 42,
-            decoration: BoxDecoration(
-              color: PortalColors.surface,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: PortalClay.soft,
-            ),
-            child: const Icon(
-              Icons.local_shipping_rounded,
-              size: 18,
-              color: PortalColors.primaryMedium,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Signing in as a delivery rider?',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: portalBody(
-                    size: 13,
-                    weight: FontWeight.w800,
-                    color: PortalColors.textDark,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Set up with the email your shop used.',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: portalBody(
-                    size: 11.5,
-                    color: PortalColors.textMuted,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 4),
-          const Icon(
-            Icons.chevron_right_rounded,
-            size: 20,
-            color: PortalColors.primaryMedium,
-          ),
-        ],
       ),
     );
   }

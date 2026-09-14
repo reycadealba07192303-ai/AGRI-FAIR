@@ -1,6 +1,11 @@
 import axios from 'axios';
+import { clearSession } from '../utils/auth';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+// Without VITE_API_URL, talk to port 8080 on whatever host served the page:
+// localhost on the laptop, the laptop's LAN IP when opened from a phone (for
+// example an activation link). A fixed "localhost" there is the phone itself.
+const BASE_URL = import.meta.env.VITE_API_URL
+  || `http://${window.location.hostname || 'localhost'}:8080/api`;
 export const API_ORIGIN = BASE_URL.replace(/\/api\/?$/, '');
 
 const API = axios.create({
@@ -15,6 +20,24 @@ API.interceptors.request.use((config) => {
   }
   return config;
 });
+
+/**
+ * A Super Admin can suspend an account while its owner is signed in. The next
+ * request after that is refused, and wherever it came from, the portal ends the
+ * session and says why on the login page - rather than leaving a dashboard up
+ * that fails one panel at a time.
+ */
+API.interceptors.response.use(
+  (response) => response,
+  (err) => {
+    const suspended = err?.response?.data?.code === 'ACCOUNT_SUSPENDED';
+    if (suspended && sessionStorage.getItem('token')) {
+      clearSession();
+      window.location.replace('/login?suspended=1');
+    }
+    return Promise.reject(err);
+  },
+);
 
 /**
  * Axios only fills `err.response` when the server actually answered. Without this,
