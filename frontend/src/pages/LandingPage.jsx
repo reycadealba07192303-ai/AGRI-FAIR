@@ -6,6 +6,7 @@ import riceGrain from '../assets/rice_grain_3d.png';
 import riceStalk from '../assets/rice_stalk_hero.png';
 import QRCode from 'qrcode';
 import { APP_DOWNLOAD_URL } from '../utils/appLinks';
+import HighlightsSection from './landing/HighlightsSection';
 
 const FEATURES = [
   {
@@ -38,6 +39,14 @@ const FEATURES = [
     title: 'Easy Configuration',
     desc: 'Configure system settings, schedules, and modules with ease.',
   },
+];
+
+const NAV_LINKS = [
+  { id: 'features', label: 'Features' },
+  { id: 'about', label: 'About' },
+  { id: 'how-to-use', label: 'How to use' },
+  { id: 'video', label: 'Highlights' },
+  { id: 'download', label: 'Download' },
 ];
 
 const STATS = [
@@ -76,7 +85,27 @@ export default function LandingPage() {
   const [downloadOpen, setDownloadOpen] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [qrSrc, setQrSrc] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
   const downloadUrl = APP_DOWNLOAD_URL;
+
+  // The phone menu closes on Escape, and when the screen grows past phone
+  // width - otherwise a menu opened in portrait lingers after rotating.
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    const wide = window.matchMedia('(min-width: 861px)');
+    const onWide = (e) => {
+      if (e.matches) setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    wide.addEventListener('change', onWide);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      wide.removeEventListener('change', onWide);
+    };
+  }, [menuOpen]);
 
   // Drawn from the live download link rather than a saved picture, so the QR
   // can never point at an old host after the APK moves.
@@ -150,6 +179,7 @@ export default function LandingPage() {
 
   const scrollToSection = (id) => (e) => {
     e.preventDefault();
+    setMenuOpen(false);
     const el = document.getElementById(id);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -158,24 +188,72 @@ export default function LandingPage() {
 
   return (
     <div className="lp-root">
-      {/* NAV */}
-      <nav className="lp-nav">
+      {/* NAV — links inline on wide screens, a menu sheet on phones */}
+      <nav className={`lp-nav${menuOpen ? ' is-open' : ''}`}>
         <div className="lp-nav-inner">
           <div className="lp-logo" onClick={() => navigate('/')}>
             <img src={logoImg} alt="AgriFair Logo" className="lp-logo-img" />
             <span className="lp-logo-text">AgriFair</span>
           </div>
           <div className="lp-nav-links">
-            <a href="#features" onClick={scrollToSection('features')}>Features</a>
-            <a href="#about" onClick={scrollToSection('about')}>About</a>
-            <a href="#how-to-use" onClick={scrollToSection('how-to-use')}>How to use</a>
-            <a href="#download" onClick={scrollToSection('download')}>Download</a>
+            {NAV_LINKS.map((link) => (
+              <a key={link.id} href={`#${link.id}`} onClick={scrollToSection(link.id)}>
+                {link.label}
+              </a>
+            ))}
             <button className="lp-nav-cta" onClick={() => navigate('/login')}>
+              Sign In
+            </button>
+          </div>
+          <button
+            type="button"
+            className="lp-nav-toggle"
+            aria-expanded={menuOpen}
+            aria-controls="lp-nav-sheet"
+            aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+        </div>
+
+        <div className="lp-nav-sheet" id="lp-nav-sheet" hidden={!menuOpen}>
+          <ul className="lp-nav-sheet-links">
+            {NAV_LINKS.map((link) => (
+              <li key={link.id}>
+                <a href={`#${link.id}`} onClick={scrollToSection(link.id)}>
+                  {link.label}
+                  <span aria-hidden="true">→</span>
+                </a>
+              </li>
+            ))}
+          </ul>
+          <div className="lp-nav-sheet-actions">
+            <button
+              type="button"
+              className="lp-nav-sheet-primary"
+              onClick={() => {
+                setMenuOpen(false);
+                setDownloadOpen(true);
+              }}
+            >
+              Get the app
+            </button>
+            <button
+              type="button"
+              className="lp-nav-sheet-secondary"
+              onClick={() => navigate('/login')}
+            >
               Sign In
             </button>
           </div>
         </div>
       </nav>
+      {menuOpen && (
+        <div className="lp-nav-backdrop" aria-hidden="true" onClick={() => setMenuOpen(false)} />
+      )}
 
       {/* HERO — Full-width immersive */}
       <section className="lp-hero" ref={heroRef}>
@@ -433,33 +511,8 @@ export default function LandingPage() {
         </div>
       )}
 
-      {/* VIDEO ADS SECTION */}
-      <section className="lp-video-ads" id="video">
-        <div className="lp-section-inner animate-on-scroll">
-          <div className="lp-section-header">
-            <span className="lp-section-badge">Highlights</span>
-            <h2 className="lp-section-title">See AgriFair in Action</h2>
-            <p className="lp-section-sub">
-              Watch our latest highlights and promotional videos to see how we transform agricultural events.
-            </p>
-          </div>
-          <div className="lp-video-container">
-            {/* Served from /public, so it ships with the site instead of
-                depending on a third-party host. preload="metadata" keeps the
-                landing page light until someone presses play. */}
-            <video
-              className="lp-video-element"
-              controls
-              playsInline
-              preload="metadata"
-              poster="/media/agrifair-highlights-poster.jpg"
-            >
-              <source src="/media/agrifair-highlights.mp4" type="video/mp4" />
-              Your browser does not support the video tag.
-            </video>
-          </div>
-        </div>
-      </section>
+      {/* HIGHLIGHTS — the animated short and its scenes */}
+      <HighlightsSection />
 
       {/* END CTA */}
       <section className="lp-cta" id="get-started">

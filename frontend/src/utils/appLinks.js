@@ -6,8 +6,25 @@
  */
 const SITE_APK_PATH = '/downloads/AgriFair.apk';
 
+/* global __AGRIFAIR_LAN_HOST__ */
+/** Set by vite.config.js for the dev server only; empty in a production build. */
+const DEV_LAN_HOST = typeof __AGRIFAIR_LAN_HOST__ === 'string' ? __AGRIFAIR_LAN_HOST__ : '';
+
+/**
+ * An address a phone can reach. On the live site that is simply the site. On
+ * the laptop, "localhost" in a QR code would point the phone at itself, so the
+ * laptop's Wi-Fi address stands in for it.
+ */
+function shareableOrigin() {
+  const { protocol, hostname, port, origin } = window.location;
+  const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(hostname);
+  return isLocal && DEV_LAN_HOST
+    ? `${protocol}//${DEV_LAN_HOST}${port ? `:${port}` : ''}`
+    : origin;
+}
+
 const siteApkUrl = () =>
-  typeof window !== 'undefined' ? `${window.location.origin}${SITE_APK_PATH}` : SITE_APK_PATH;
+  typeof window !== 'undefined' ? `${shareableOrigin()}${SITE_APK_PATH}` : SITE_APK_PATH;
 
 /**
  * Turns a Google Drive share link into one that downloads the file itself.
