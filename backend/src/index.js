@@ -19,6 +19,11 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Railway puts one proxy in front of the app. Without this every request looks
+// like it came from that proxy, so the rate limiters counted all users as one
+// and five code requests from anyone locked everyone out for 15 minutes.
+app.set('trust proxy', 1);
+
 initFirebase();
 
 // ====================== CORS (PUT FIRST) ======================
