@@ -7,10 +7,13 @@ let gmailToken = null; // { value, expiresAt }
 const GMAIL_SEND_URL =
   'https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media';
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const BREVO_SEND_URL = 'https://api.brevo.com/v3/smtp/email';
 
 /**
- * Two ways to send, picked by what is configured:
+ * Three ways to send, picked by what is configured (first match wins):
  *
+ * - BREVO_API_KEY: Brevo's transactional email API over HTTPS (port 443), so
+ *   it works on Railway. MAIL_FROM must be a sender verified in Brevo.
  * - GMAIL_CLIENT_ID/GMAIL_CLIENT_SECRET/GMAIL_REFRESH_TOKEN: the Gmail API
  *   over HTTPS (port 443). Use this on Railway — Railway blocks outbound SMTP
  *   (25/465/587) on non-Pro plans, so Gmail SMTP only ever times out there.
@@ -23,6 +26,10 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
  * For Gmail SMTP, SMTP_PASS must be an App Password, not the account password —
  * Google rejects plain passwords from SMTP.
  */
+function useBrevo() {
+  return Boolean(process.env.BREVO_API_KEY);
+}
+
 function useGmailApi() {
   const { GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN } = process.env;
   return Boolean(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN);
@@ -59,7 +66,7 @@ export function getMailer() {
 }
 
 export function isMailConfigured() {
-  return useGmailApi() || smtpConfigured();
+  return useBrevo() || useGmailApi() || smtpConfigured();
 }
 
 /**
@@ -111,16 +118,79 @@ async function sendViaGmailApi(message) {
   return res.json();
 }
 
+/** "AgriFair <support@gmail.com>" -> { name: 'AgriFair', email: 'support@gmail.com' } */
+function parseAddress(value) {
+  const match = /^s*"?([^"<]*?)"?s*<([^>]+)>s*$/.exec(value || '');
+  if (match) return { name: match[1] || undefined, email: match[2].trim() };
+  return { email: String(value || '').trim() };
+}
+
+async function sendViaBrevo({ from, to, subject, html, attachments }) {
+  const res = await fetch(BREVO_SEND_URL, {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify({
+      sender: parseAddress(from),
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      // Brevo takes attachments as base64 rather than nodemailer's Buffers.
+      ...(attachments?.length
+        ? {
+            attachment: attachments.map((a) => ({
+              name: a.filename,
+              content: Buffer.from(a.content).toString('base64'),
+            })),
+          }
+        : {}),
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Brevo rejected the email (${res.status}): ${detail}`);
+  }
+
+  return res.json();
+}
+
 export async function sendMail({ to, subject, html, attachments }) {
   if (!isMailConfigured()) {
     throw new Error(
-      'Email is not set up. Add GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET and GMAIL_REFRESH_TOKEN (or SMTP_HOST, SMTP_USER and SMTP_PASS) to backend/.env, then restart the server.'
+      'Email is not set up. Add BREVO_API_KEY (or the GMAIL_* or SMTP_* settings) to backend/.env, then restart the server.'
     );
   }
 
   const from = process.env.MAIL_FROM || `AgriFair <${process.env.SMTP_USER}>`;
   const message = { from, to, subject, html, attachments };
 
+  if (useBrevo()) return sendViaBrevo(message);
   if (useGmailApi()) return sendViaGmailApi(message);
   return getMailer().sendMail(message);
+}
+
+/**
+ * sendMail, but gives up after `ms`. The phone abandons a request after 20
+ * seconds, so anything a person waits on must answer before that - either
+ * "sent" or a real error they can retry, never a silent background failure.
+ */
+export const SEND_TIMEOUT_MS = 15 * 1000;
+
+export async function sendMailWithin(ms, message) {
+  let timer;
+  try {
+    return await Promise.race([
+      sendMail(message),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error('the mail service did not answer in time')), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }

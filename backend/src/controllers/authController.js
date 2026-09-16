@@ -17,6 +17,9 @@ function fail(res, status, err, fallback) {
   });
 }
 
+/** Asking again inside the one-minute wait is "too many requests", not bad input. */
+const statusFor = (err) => (err?.code === 'RESEND_COOLDOWN' ? 429 : 400);
+
 export const register = async (req, res) => {
   try {
     const user = await authService.register(req.body, { client: req.headers['x-client'] });
@@ -45,7 +48,7 @@ export const resendVerification = async (req, res) => {
       ...result
     });
   } catch (err) {
-    return fail(res, 400, err, 'Could not resend verification email');
+    return fail(res, statusFor(err), err, 'Could not resend verification email');
   }
 };
 
@@ -104,7 +107,7 @@ export const forgotPassword = async (req, res) => {
   } catch (err) {
     // Config and rate-limit problems are real failures the caller must see.
     // A missing account is not - that answer would leak who is registered.
-    return fail(res, 400, err, 'Could not send the reset code');
+    return fail(res, statusFor(err), err, 'Could not send the reset code');
   }
 
   return res.status(200).json({
@@ -177,6 +180,6 @@ export const resendActivation = async (req, res) => {
     const result = await activationService.resendFromLink(req.body || {});
     return res.status(200).json({ success: true, ...result });
   } catch (err) {
-    return fail(res, err?.code === 'RESEND_COOLDOWN' ? 429 : 400, err, 'Could not send a new link');
+    return fail(res, statusFor(err), err, 'Could not send a new link');
   }
 };

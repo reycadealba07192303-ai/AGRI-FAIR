@@ -30,28 +30,36 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     FocusScope.of(context).unfocus();
     setState(() => _sending = true);
 
+    int? resendAfter;
     try {
       await AuthService.instance.forgotPassword(email);
-      if (!mounted) return;
-      setState(() {
-        _sending = false;
-        _sent = true;
-      });
-
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(
-            email: email,
-            fullName: '',
-            purpose: OtpPurpose.passwordReset,
-          ),
-        ),
-      );
     } on ApiException catch (err) {
       if (!mounted) return;
-      setState(() => _sending = false);
-      _notify(err.message, ok: false);
+      // A code went out less than a minute ago and still works - open it.
+      if (!err.isResendCooldown) {
+        setState(() => _sending = false);
+        _notify(err.message, ok: false);
+        return;
+      }
+      resendAfter = err.retryAfter;
     }
+
+    if (!mounted) return;
+    setState(() {
+      _sending = false;
+      _sent = true;
+    });
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OtpVerificationScreen(
+          email: email,
+          fullName: '',
+          purpose: OtpPurpose.passwordReset,
+          resendAfter: resendAfter,
+        ),
+      ),
+    );
   }
 
   void _notify(String message, {required bool ok}) {

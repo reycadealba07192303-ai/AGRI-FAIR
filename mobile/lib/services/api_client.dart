@@ -14,10 +14,14 @@ import 'api_config.dart';
 /// to confirm this order."), so they are passed through rather than replaced
 /// with a generic failure string.
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode, this.code});
+  ApiException(this.message, {this.statusCode, this.code, this.retryAfter});
 
   final String message;
   final int? statusCode;
+
+  /// Seconds the server wants the app to wait before asking again - set with
+  /// `RESEND_COOLDOWN`, so a resend button can count down the real remainder.
+  final int? retryAfter;
 
   /// Set only when the server marks a failure as one the app should act on,
   /// such as `EMAIL_NOT_VERIFIED`. Reading this beats matching the sentence,
@@ -26,6 +30,7 @@ class ApiException implements Exception {
 
   bool get isUnauthorized => statusCode == 401;
   bool get isEmailNotVerified => code == 'EMAIL_NOT_VERIFIED';
+  bool get isResendCooldown => code == 'RESEND_COOLDOWN';
 
   @override
   String toString() => message;
@@ -254,6 +259,9 @@ class ApiClient {
         message?.toString() ?? 'Request failed ($status).',
         statusCode: status,
         code: body is Map ? body['code']?.toString() : null,
+        retryAfter: body is Map && body['retryAfter'] is num
+            ? (body['retryAfter'] as num).ceil()
+            : null,
       );
     }
 

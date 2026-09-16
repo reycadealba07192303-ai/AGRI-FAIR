@@ -2,8 +2,9 @@ import crypto from 'crypto';
 
 import User from '../models/User.js';
 import { getFirebaseAuth } from '../config/firebase.js';
-import { sendMail, isMailConfigured } from '../config/mailer.js';
+import { sendMailWithin, isMailConfigured, SEND_TIMEOUT_MS } from '../config/mailer.js';
 import { getAppUrl } from './authService.js';
+import { SEND_COOLDOWN_SECONDS, cooldownError, secondsLeft } from './sendCooldown.js';
 
 /**
  * Activating an account somebody else created - a rider's, made by their seller.
@@ -19,7 +20,7 @@ import { getAppUrl } from './authService.js';
  */
 
 export const ACTIVATION_TTL_HOURS = 48;
-export const RESEND_COOLDOWN_SECONDS = 60;
+export const RESEND_COOLDOWN_SECONDS = SEND_COOLDOWN_SECONDS;
 
 /**
  * The link is the credential, so only its hash is stored. SHA-256 rather than
@@ -106,22 +107,19 @@ export const activationService = {
   async issue(user) {
     if (!isMailConfigured()) {
       throw new Error(
-        'Email is not set up. Add SMTP_HOST, SMTP_USER and SMTP_PASS to backend/.env, then restart the server.'
+        'Email is not set up. Add BREVO_API_KEY (or the GMAIL_* or SMTP_* settings) to backend/.env, then restart the server.'
       );
     }
 
-    if (user.activationSentAt) {
-      const waited = (Date.now() - user.activationSentAt.getTime()) / 1000;
-      if (waited < RESEND_COOLDOWN_SECONDS) {
-        const retryAfter = Math.ceil(RESEND_COOLDOWN_SECONDS - waited);
-        throw codedError(
-          `A link was just sent. Try again in ${retryAfter} seconds.`,
-          'RESEND_COOLDOWN',
-          { retryAfter }
-        );
-      }
+    const wait = secondsLeft(user.activationSentAt);
+    if (wait > 0) {
+      throw cooldownError(
+        wait,
+        `A link was just sent. Use that one, or wait ${wait} seconds to get a new one.`
+      );
     }
 
+    const previousSentAt = user.activationSentAt;
     const token = crypto.randomBytes(32).toString('base64url');
 
     user.activationTokenHash = hashActivationToken(token);
@@ -132,12 +130,17 @@ export const activationService = {
     const link = `${getAppUrl()}/activate?token=${token}`;
     const { subject, html } = activationEmail({ name: user.name, link });
 
-    // Same trade as the codes: the link is valid the moment it is stored, and
-    // waiting on Gmail would add seconds to the request. A failed send is
-    // logged; the seller or the page can send another.
-    sendMail({ to: user.email, subject, html }).catch((err) => {
+    // Saved before sending, so a second tap during the send already sees the
+    // cooldown. Delivery is awaited like the codes: a failed send is reported,
+    // and the cooldown is handed back so "Resend" works right away.
+    try {
+      await sendMailWithin(SEND_TIMEOUT_MS, { to: user.email, subject, html });
+    } catch (err) {
       console.error(`[activation] could not deliver the link to ${user.email}:`, err.message);
-    });
+      user.activationSentAt = previousSentAt;
+      await user.save();
+      throw new Error('We could not send the activation email right now. Please try again in a moment.');
+    }
 
     return {
       sent: true,

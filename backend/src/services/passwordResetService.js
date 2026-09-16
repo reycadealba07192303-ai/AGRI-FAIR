@@ -5,6 +5,7 @@ import { authRepository } from '../repositories/authRepository.js';
 import { updatePasswordByUserId } from '../repositories/userRepository.js';
 import { getFirebaseAuth } from '../config/firebase.js';
 import { otpService, normalizeEmail, OTP_PURPOSES } from './otpService.js';
+import { claimSendSlot } from './sendCooldown.js';
 
 const RESET_TOKEN_TTL = '15m';
 const RESET_TOKEN_PURPOSE = 'password-reset';
@@ -26,7 +27,12 @@ export const passwordResetService = {
     if (!cleanEmail) throw new Error('Email is required');
 
     const user = await authRepository.findByEmail(cleanEmail);
-    if (!user) return { sent: false };
+    if (!user) {
+      // Same minute as a real account gets from otpService, so a repeated
+      // request answers "wait" either way and says nothing about who exists.
+      claimSendSlot(`reset:${cleanEmail}`);
+      return { sent: false };
+    }
 
     return otpService.issue({
       email: cleanEmail,

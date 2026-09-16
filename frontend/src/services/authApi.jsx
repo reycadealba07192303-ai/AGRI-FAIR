@@ -68,4 +68,13 @@ export const logoutUser = () => API.post('/auth/logout');
 export const resendVerificationEmail = (email) =>
   API.post('/auth/resend-verification', { email });
 
+// Password reset: email a 6-digit code, trade the code for a short-lived
+// reset token, then set the new password with that token.
+export const requestPasswordReset = (email) =>
+  API.post('/auth/forgot-password', { email });
+export const verifyResetCode = (email, code) =>
+  API.post('/auth/verify-reset-otp', { email, code });
+export const resetPassword = (resetToken, newPassword) =>
+  API.post('/auth/reset-password', { resetToken, newPassword });
+
 export default API;

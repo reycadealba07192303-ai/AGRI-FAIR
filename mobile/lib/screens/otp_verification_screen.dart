@@ -26,12 +26,17 @@ class OtpVerificationScreen extends StatefulWidget {
   /// again there would spend a slot from the resend allowance for nothing.
   final bool sendOnOpen;
 
+  /// Seconds before Resend unlocks, when the server said a code went out less
+  /// than a minute ago. That code still works, so the screen opens anyway.
+  final int? resendAfter;
+
   const OtpVerificationScreen({
     super.key,
     required this.email,
     required this.fullName,
     this.purpose = OtpPurpose.signup,
     this.sendOnOpen = false,
+    this.resendAfter,
   });
 
   bool get isReset => purpose == OtpPurpose.passwordReset;
@@ -42,7 +47,8 @@ class OtpVerificationScreen extends StatefulWidget {
 
 class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   static const int _codeLength = 6;
-  static const int _resendSeconds = 30;
+  /// Matches the server's one-minute wait between codes to the same email.
+  static const int _resendSeconds = 60;
 
   late final List<TextEditingController> _controllers;
   late final List<FocusNode> _focusNodes;
@@ -59,7 +65,7 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
     for (final c in _controllers) {
       c.addListener(() => setState(() {}));
     }
-    _startResendTimer();
+    _startResendTimer(widget.resendAfter ?? _resendSeconds);
 
     if (widget.sendOnOpen) {
       // Not awaited: the boxes are usable immediately and the code is valid
@@ -78,6 +84,10 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _notify(message);
     } on ApiException catch (err) {
       if (!mounted) return;
+      // A code sent moments ago still works; only the countdown needs fixing.
+      if (err.isResendCooldown && err.retryAfter != null) {
+        _startResendTimer(err.retryAfter!);
+      }
       // Resend is right there, so this is worth saying but not worth blocking.
       _notify(err.message);
     }
@@ -98,8 +108,8 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
   String get _code => _controllers.map((c) => c.text).join();
   bool get _canSubmit => _code.length == _codeLength;
 
-  void _startResendTimer() {
-    setState(() => _secondsLeft = _resendSeconds);
+  void _startResendTimer([int seconds = _resendSeconds]) {
+    setState(() => _secondsLeft = seconds);
     _resendTimer?.cancel();
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsLeft <= 1) {
@@ -206,6 +216,9 @@ class _OtpVerificationScreenState extends State<OtpVerificationScreen> {
       _notify(message);
     } on ApiException catch (err) {
       if (!mounted) return;
+      if (err.isResendCooldown && err.retryAfter != null) {
+        _startResendTimer(err.retryAfter!);
+      }
       _notify(err.message);
     }
   }

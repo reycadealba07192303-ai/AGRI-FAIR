@@ -4,6 +4,7 @@ import { toNameKey } from '../models/User.js';
 import { getFirebaseAuth } from '../config/firebase.js';
 import LoginSession from '../models/LoginSession.js';
 import { emailVerificationService } from './passwordResetService.js';
+import { claimSendSlot } from './sendCooldown.js';
 
 function signToken(user) {
   const secret = process.env.JWT_SECRET;
@@ -351,7 +352,9 @@ export const authService = {
     // A rider who has not activated gets a link, not a code - a code here would
     // land in their inbox with nowhere to type it.
     if (!user?.firebaseUid || user.passwordSet === false) {
-      // Do not leak whether the email exists
+      // Do not leak whether the email exists - including through the resend
+      // cooldown, which a real account would hit on its second request.
+      claimSendSlot(`signup:${cleanEmail}`);
       return { sent: true };
     }
 
@@ -361,10 +364,13 @@ export const authService = {
     }
 
     if (requestMeta.client === 'mobile') {
+      // The minute between codes is enforced where the code is issued.
       await emailVerificationService.sendSignupOtp(user);
       return { sent: true, verificationMethod: 'otp' };
     }
 
+    // Firebase sends the web link and keeps no record here to time it against.
+    claimSendSlot(`verify-link:${cleanEmail}`);
     await sendFirebaseVerificationEmail(user.firebaseUid, user.email);
     return { sent: true, verificationMethod: 'link' };
   },

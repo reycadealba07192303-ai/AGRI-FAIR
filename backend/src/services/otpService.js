@@ -2,8 +2,9 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 
 import { otpRepository } from '../repositories/otpRepository.js';
-import { sendMail, isMailConfigured } from '../config/mailer.js';
+import { sendMailWithin, isMailConfigured, SEND_TIMEOUT_MS } from '../config/mailer.js';
 import { OTP_TTL_MINUTES, OTP_MAX_ATTEMPTS, OTP_PURPOSES } from '../models/EmailOtp.js';
+import { claimSendSlot, cooldownError, releaseSendSlot, secondsLeft } from './sendCooldown.js';
 
 const RESEND_WINDOW_MS = 15 * 60 * 1000;
 const MAX_CODES_PER_WINDOW = 5;
@@ -71,9 +72,15 @@ export const otpService = {
 
     if (!isMailConfigured()) {
       throw new Error(
-        'Email is not set up. Add SMTP_HOST, SMTP_USER and SMTP_PASS to backend/.env, then restart the server.'
+        'Email is not set up. Add BREVO_API_KEY (or the GMAIL_* or SMTP_* settings) to backend/.env, then restart the server.'
       );
     }
+
+    // A minute between codes. Checked against the stored codes, so it holds
+    // across restarts and applies to every path that sends one - sign-up,
+    // resend, a blocked sign-in, a password reset.
+    const wait = secondsLeft(await otpRepository.latestCreatedAt(cleanEmail, purpose));
+    if (wait > 0) throw cooldownError(wait);
 
     const recentCount = await otpRepository.countRecent(
       cleanEmail,
@@ -84,24 +91,33 @@ export const otpService = {
       throw new Error('Too many codes requested. Please try again later.');
     }
 
+    // The stored code is only written after the email goes out, so two quick
+    // taps would both pass the check above. Holding the slot in memory while
+    // this one sends makes the second wait its minute like any other resend.
+    const slot = `otp:${purpose}:${cleanEmail}`;
+    claimSendSlot(slot);
+
     const code = generateCode();
     const codeHash = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
+    // Delivery is awaited, and the code is stored only once it went out.
+    // Sending in the background used to answer "a code is on its way" even
+    // when the mail server refused it (Railway blocks SMTP, so every send
+    // timed out there) - and the stored code then held the one-minute
+    // cooldown against a code nobody received. A failed send gives the slot
+    // back, so the person can try again straight away.
+    const { subject, html } = TEMPLATES[purpose](name, code);
+    try {
+      await sendMailWithin(SEND_TIMEOUT_MS, { to: cleanEmail, subject, html });
+    } catch (err) {
+      releaseSendSlot(slot);
+      console.error(`[otp] could not deliver ${purpose} code to ${cleanEmail}:`, err.message);
+      throw new Error('We could not send the code email right now. Please try again in a moment.');
+    }
+
     await otpRepository.consumeAllFor(cleanEmail, purpose);
     await otpRepository.create({ email: cleanEmail, purpose, codeHash, expiresAt });
-
-    // The code is valid the moment it is stored; the email is only delivery.
-    // Waiting for Gmail to accept it added five or six seconds to every
-    // signup and resend - long enough that phones on a slow link gave up and
-    // reported a timeout for a request that had already succeeded.
-    //
-    // A failed send is logged rather than thrown: the caller has already been
-    // told a code is on its way, and the screen it lands on can resend.
-    const { subject, html } = TEMPLATES[purpose](name, code);
-    sendMail({ to: cleanEmail, subject, html }).catch((err) => {
-      console.error(`[otp] could not deliver ${purpose} code to ${cleanEmail}:`, err.message);
-    });
 
     return { sent: true };
   },

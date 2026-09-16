@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import './AuthPages.css';
 import logoImg from '../../assets/logo.png';
@@ -17,6 +17,15 @@ export default function RegisterPage() {
   const [resending, setResending] = useState(false);
   const [alert, setAlert] = useState({ type: '', message: '' });
   const [awaitingVerification, setAwaitingVerification] = useState(false);
+  // One email a minute, same as the server enforces. Starts full, because
+  // creating the account has just sent the first one.
+  const [cooldown, setCooldown] = useState(0);
+
+  useEffect(() => {
+    if (cooldown <= 0) return undefined;
+    const timer = setTimeout(() => setCooldown((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [cooldown]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -76,7 +85,9 @@ export default function RegisterPage() {
       });
 
       setAwaitingVerification(true);
+      setCooldown(60);
       if (res.data?.user?.verificationEmailSent === false) {
+        setCooldown(0);
         showAlert('error', res.data.message || 'Account created, but verification email failed. Try Resend.');
       }
     } catch (err) {
@@ -87,11 +98,16 @@ export default function RegisterPage() {
   };
 
   const handleResend = async () => {
+    if (cooldown > 0) return;
     setResending(true);
     try {
       await resendVerificationEmail(formData.email.trim().toLowerCase());
+      setCooldown(60);
       showAlert('success', 'Verification email resent. Check your Gmail inbox.');
     } catch (err) {
+      if (err.response?.data?.code === 'RESEND_COOLDOWN') {
+        setCooldown(err.response.data.retryAfter || 60);
+      }
       showAlert('error', getErrorMessage(err, 'Could not resend verification email'));
     } finally {
       setResending(false);
@@ -163,10 +179,14 @@ export default function RegisterPage() {
                 type="button"
                 className="auth-v2-submit"
                 onClick={handleResend}
-                disabled={resending}
+                disabled={resending || cooldown > 0}
               >
-                {resending ? 'Sending...' : 'Resend verification email'}
-                {!resending && <span className="auth-v2-submit-arrow">-&gt;</span>}
+                {resending
+                  ? 'Sending...'
+                  : cooldown > 0
+                    ? `Resend in ${cooldown}s`
+                    : 'Resend verification email'}
+                {!resending && cooldown === 0 && <span className="auth-v2-submit-arrow">-&gt;</span>}
               </button>
 
               <p className="auth-v2-footer-note">

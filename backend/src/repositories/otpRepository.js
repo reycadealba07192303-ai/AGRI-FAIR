@@ -26,6 +26,15 @@ export const otpRepository = {
     }).sort({ createdAt: -1 });
   },
 
+  /** When the newest code for this address and purpose was issued, used or not. */
+  async latestCreatedAt(email, purpose) {
+    const latest = await EmailOtp.findOne({ email, purpose })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean();
+    return latest?.createdAt || null;
+  },
+
   async countRecent(email, purpose, since) {
     return EmailOtp.countDocuments({ email, purpose, createdAt: { $gte: since } });
   },

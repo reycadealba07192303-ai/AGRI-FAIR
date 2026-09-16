@@ -32,37 +32,46 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final email = _emailController.text.trim();
     setState(() => _isLoading = true);
 
+    int? resendAfter;
     try {
       await AuthService.instance.forgotPassword(email);
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _emailSent = true;
-      });
-
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OtpVerificationScreen(
-            email: email,
-            fullName: '',
-            purpose: OtpPurpose.passwordReset,
-          ),
-        ),
-      );
     } on ApiException catch (err) {
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(err.message),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+      // Asked again within the minute: the code already sent still works, so
+      // go to it rather than stopping here with an error.
+      if (err.isResendCooldown) {
+        resendAfter = err.retryAfter;
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(err.message),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        return;
+      }
     }
+
+    if (!mounted) return;
+    setState(() {
+      _isLoading = false;
+      _emailSent = true;
+    });
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OtpVerificationScreen(
+          email: email,
+          fullName: '',
+          purpose: OtpPurpose.passwordReset,
+          resendAfter: resendAfter,
+        ),
+      ),
+    );
   }
 
   @override
